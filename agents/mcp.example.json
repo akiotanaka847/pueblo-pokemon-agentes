@@ -1,0 +1,28 @@
+{
+  "_comentario": "Plantilla de conectores MCP. Copia lo que uses a agents/mcp.json (ese sí se carga y está gitignored). 'autoApprove' lista tools que NO pedirán aprobación (las de solo lectura). Las de escribir/enviar/borrar piden aprobación por defecto.",
+  "mcpServers": {
+    "archivos": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/ruta/absoluta/a/tus/datos"],
+      "autoApprove": ["read_file", "read_text_file", "list_directory", "directory_tree", "search_files", "get_file_info", "list_allowed_directories"]
+    },
+    "busqueda-web": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-brave-search"],
+      "env": { "BRAVE_API_KEY": "TU_CLAVE_DE_BRAVE" },
+      "autoApprove": ["brave_web_search", "brave_local_search"]
+    },
+    "gmail": {
+      "disabled": true,
+      "command": "npx",
+      "args": ["-y", "@gongrzhe/server-gmail-autoauth-mcp"],
+      "_nota": "Requiere autorizar OAuth de Gmail la primera vez (login en el navegador). Consulta la doc del servidor. Enviar correo pedirá tu aprobación en el tablero."
+    },
+    "slack": {
+      "disabled": true,
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-slack"],
+      "env": { "SLACK_BOT_TOKEN": "xoxb-...", "SLACK_TEAM_ID": "T..." }
+    }
+  }
+}

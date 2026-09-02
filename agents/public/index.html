@@ -1,0 +1,605 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Pueblo Pokémon — Centro de Operaciones</title>
+<style>
+  :root {
+    --red:#d23b30; --red-dk:#a52a24; --ink:#21242e; --ink-soft:#3b4152;
+    --green:#70c66c; --green-dk:#4e9a52; --blue:#3f7fd6; --gold:#f0c43c; --orange:#ff9d3c;
+    --gray:#8b93a3; --panel:#fff; --line:#e3e1d6; --bg:#e9e6d8; --cream:#f8f4e3;
+    --s1:6px; --s2:10px; --s3:14px; --s4:18px; --r:12px;
+  }
+  * { box-sizing:border-box; }
+  html { -webkit-text-size-adjust:100%; }
+  body { margin:0; background:var(--bg); color:var(--ink);
+    font-family:system-ui,-apple-system,"Segoe UI",sans-serif; }
+  button, input, textarea, select { font:inherit; }
+  :focus-visible { outline:3px solid var(--blue); outline-offset:2px; }
+
+  /* ── Cabecera ── */
+  header { background:linear-gradient(var(--red),var(--red-dk)); color:#fff;
+    padding:12px var(--s4); display:flex; align-items:center; gap:var(--s3);
+    border-bottom:5px solid var(--ink); position:sticky; top:0; z-index:20; flex-wrap:wrap; }
+  .lens { width:32px; height:32px; border-radius:50%; background:radial-gradient(circle at 32% 30%,#eaf6ff,#7fc4f5);
+    border:3px solid #fff; box-shadow:0 0 0 3px var(--ink); flex:0 0 auto; }
+  .brand h1 { margin:0; font-size:19px; letter-spacing:.4px; line-height:1.1; }
+  .brand small { opacity:.9; font-size:12px; }
+  .hstats { margin-left:auto; display:flex; align-items:center; gap:var(--s1); }
+  .pill { font-size:11px; padding:4px 10px; border-radius:999px; background:rgba(255,255,255,.22);
+    white-space:nowrap; border:none; color:#fff; }
+  button.pill { cursor:pointer; font-size:14px; padding:3px 10px; }
+  button.pill:hover { background:rgba(255,255,255,.35); }
+
+  /* ── Rejilla principal ── */
+  .wrap { display:grid; grid-template-columns:340px minmax(0,1fr); gap:var(--s3);
+    padding:var(--s3); max-width:1400px; margin:0 auto; align-items:start; }
+  @media (max-width:980px){
+    .wrap { grid-template-columns:1fr; }
+    .col-main { order:-1; }              /* el pueblo primero en pantallas estrechas */
+  }
+
+  /* ── Tarjetas ── */
+  .card { background:var(--panel); border:3px solid var(--ink); border-radius:var(--r);
+    box-shadow:3px 3px 0 rgba(33,36,46,.14); margin-bottom:var(--s3); overflow:hidden; }
+  .card > h2 { font-size:12px; text-transform:uppercase; letter-spacing:1px; margin:0;
+    padding:10px var(--s3); background:var(--ink); color:#fff; }
+  .card.alert { border-color:var(--orange); box-shadow:3px 3px 0 rgba(255,157,60,.3); }
+  .card.alert > h2 { background:var(--orange); color:#2b1b06; }
+  .body { padding:var(--s3); }
+
+  /* ── Formularios ── */
+  input, textarea, select { width:100%; padding:9px 11px; border:2px solid var(--line);
+    border-radius:9px; background:#fbfaf5; margin-bottom:var(--s2); }
+  input:hover, textarea:hover, select:hover { border-color:#c9c6b8; }
+  textarea { resize:vertical; min-height:60px; }
+  button { cursor:pointer; border:3px solid var(--ink); border-radius:10px; background:var(--gold);
+    font-weight:700; padding:9px 14px; box-shadow:2px 2px 0 var(--ink); transition:transform .05s; }
+  button:active { transform:translate(2px,2px); box-shadow:none; }
+  button.primary { background:var(--green); color:#10320f; width:100%; }
+  button.approve { background:var(--green); }
+  button.reject { background:#ececec; }
+  button.small { padding:5px 10px; font-size:12px; box-shadow:2px 2px 0 var(--ink); }
+  .row { display:flex; align-items:center; gap:var(--s1); flex-wrap:wrap; }
+
+  /* ── Atajos de ejemplo ── */
+  .chips { display:flex; flex-wrap:wrap; gap:6px; margin:2px 0 var(--s2); }
+  .chip { font-size:11px; padding:5px 9px; border-radius:999px; border:2px dashed var(--line);
+    background:#fbfaf5; color:var(--ink-soft); cursor:pointer; box-shadow:none; font-weight:500; }
+  .chip:hover { border-color:var(--green-dk); background:#f1f9f0; }
+  .chip:active { transform:none; }
+
+  /* ── Pestañas ── */
+  .tabs { display:flex; background:var(--ink); }
+  .tab { flex:1; border:none; border-radius:0; background:transparent; color:#aeb6c6;
+    font-size:11.5px; font-weight:700; letter-spacing:.4px; padding:10px 4px; box-shadow:none;
+    border-bottom:3px solid transparent; }
+  .tab:hover { color:#fff; }
+  .tab.active { color:#fff; background:rgba(255,255,255,.08); border-bottom-color:var(--gold); }
+  .tab:active { transform:none; }
+
+  /* ── Listas con scroll propio ── */
+  .scroll { max-height:330px; overflow-y:auto; padding-right:2px; }
+  .scroll::-webkit-scrollbar { width:8px; }
+  .scroll::-webkit-scrollbar-thumb { background:#cfcdc0; border-radius:8px; }
+
+  .item { padding:9px 11px; border:2px solid var(--line); border-radius:10px; margin-bottom:7px;
+    background:#fbfaf5; cursor:pointer; }
+  .item:hover { border-color:var(--green-dk); }
+  .item.active { border-color:var(--red); background:#fff6f5; }
+  .item .t { font-weight:700; font-size:13.5px; line-height:1.3; }
+  .badge { font-size:10px; font-weight:800; padding:2px 8px; border-radius:999px; border:2px solid var(--ink);
+    text-transform:uppercase; letter-spacing:.4px; }
+  .b-pending{background:#eee}.b-planning{background:#d9ecff}.b-in_progress{background:#fff2c4}
+  .b-awaiting_approval{background:#ffd7b0}.b-done{background:var(--green)}.b-failed{background:#ffb3ae}
+  .b-blocked{background:#ddd}
+  .muted { color:var(--gray); font-size:11.5px; }
+  .empty { color:var(--gray); font-size:13px; padding:14px 4px; text-align:center; line-height:1.5; }
+
+  /* ── Equipo (roster) ── */
+  .member { display:flex; align-items:center; gap:var(--s2); padding:8px 10px; border:2px solid var(--line);
+    border-radius:10px; margin-bottom:7px; background:#fbfaf5; }
+  .member.lead { border-color:var(--red); background:#fff6f5; }
+  .member.busy { border-color:var(--green-dk); background:#f2faf1; }
+  .avatar { width:34px; height:34px; flex:0 0 34px; image-rendering:pixelated; border-radius:8px;
+    background-color:#dceccf; background-repeat:no-repeat; background-position:-31px -1px;
+    border:2px solid var(--line); }
+  .member .who { font-weight:700; font-size:13px; }
+  .member .role { font-size:11px; color:var(--gray); line-height:1.3; }
+
+  /* ── Aprobaciones ── */
+  .approval { border:3px solid var(--orange); background:#fff8f0; border-radius:10px;
+    padding:var(--s3); margin-bottom:var(--s2); }
+  .approval .k { font-size:11px; color:var(--gray); margin-top:5px; font-weight:700; }
+  .approval pre { background:#fff; border:1px solid var(--line); border-radius:8px; padding:9px;
+    font-size:12px; white-space:pre-wrap; overflow-x:auto; margin:7px 0; max-height:220px; overflow-y:auto; }
+
+  /* ── Pueblo ── */
+  #town { width:100%; image-rendering:pixelated; border:3px solid var(--ink); border-radius:10px;
+    background:#8ec98a; display:block; }
+  .legend { margin-top:7px; font-size:12px; color:var(--ink-soft); }
+
+  /* ── Detalle de misión ── */
+  .team { display:flex; flex-direction:column; gap:6px; }
+  .worker { display:flex; align-items:center; gap:8px; padding:6px 9px; border-radius:9px;
+    background:#f4f2e9; border:2px solid var(--line); font-size:12.5px; }
+  .worker .ttl { margin-left:auto; color:var(--gray); font-size:11.5px; text-align:right; }
+  .worker.lead { border-color:var(--red); background:#fff6f5; }
+  details.log > summary { cursor:pointer; font-weight:700; font-size:12.5px; padding:8px 0;
+    list-style:none; color:var(--ink-soft); }
+  details.log > summary::-webkit-details-marker { display:none; }
+  details.log > summary::before { content:'▸ '; color:var(--gold); }
+  details.log[open] > summary::before { content:'▾ '; }
+  .stream { max-height:300px; overflow-y:auto; display:flex; flex-direction:column; gap:6px;
+    padding:7px; background:#1c1f27; border-radius:9px; }
+  .ev { font-size:12px; line-height:1.45; padding:7px 9px; border-radius:7px; background:#262b36;
+    color:#e7e9f0; border-left:3px solid var(--gray); }
+  .ev .who { font-weight:700; } .ev .meta { color:#9aa2b3; } .ev .arrow { color:var(--gold); font-weight:700; }
+  .ev.delegated{border-left-color:var(--gold)} .ev.tool_call,.ev.tool_result{border-left-color:var(--blue)}
+  .ev.result{border-left-color:var(--green)} .ev.error{border-left-color:var(--red)}
+  .ev.approval_requested{border-left-color:var(--orange);background:#3a2a1c}
+  .ev.approval_resolved{border-left-color:var(--green)}
+
+  /* ── Cuadro de diálogo Pokémon ── */
+  @font-face { font-family:'Pkmn'; src:url('/fonts/upheaval_pro.ttf') format('truetype'); font-display:swap; }
+  .pkbox { position:relative; background:var(--cream); border:4px solid #2b3a55; border-radius:10px;
+    box-shadow:inset 0 0 0 3px var(--cream), inset 0 0 0 6px #7a90b8, 3px 3px 0 rgba(0,0,0,.18);
+    padding:16px 18px 20px; margin-top:var(--s2); }
+  .pkname { position:absolute; top:-13px; left:14px; background:var(--red); color:#fff;
+    border:3px solid #2b3a55; border-radius:8px; padding:1px 10px; font-size:12px;
+    font-family:'Pkmn',system-ui,sans-serif; letter-spacing:.5px; }
+  .pktext { font-family:'Pkmn',"Courier New",monospace; font-size:17px; line-height:1.55;
+    color:#2b3a55; white-space:pre-wrap; min-height:3.2em; letter-spacing:.3px; }
+  .pkarrow { position:absolute; right:14px; bottom:6px; color:var(--red); font-size:15px; animation:bob .7s infinite; }
+  @keyframes bob { 0%,100%{transform:translateY(0)} 50%{transform:translateY(3px)} }
+  .pkhint { font-size:10px; color:var(--gray); text-align:right; margin-top:3px; }
+  .result-box { background:var(--cream); border:4px solid #2b3a55; border-radius:10px;
+    box-shadow:inset 0 0 0 3px var(--cream), inset 0 0 0 6px #7a90b8;
+    padding:14px 16px; white-space:pre-wrap; font-size:14px; line-height:1.55; color:#2b3a55; }
+  h3,h4 { margin:14px 0 6px; } h4 { font-size:13px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="lens"></div>
+  <div class="brand">
+    <h1>Pueblo Pokémon</h1>
+    <small>Centro de Operaciones · asigna, delega, aprueba</small>
+  </div>
+  <div class="hstats">
+    <span class="pill" id="working">—</span>
+    <span class="pill" id="live">● conectando…</span>
+    <button class="pill" id="sound" title="Sonido al completar tareas y al pedir permiso">🔊</button>
+  </div>
+</header>
+
+<main class="wrap">
+  <!-- ══ Columna lateral ══ -->
+  <section class="col-side">
+    <div class="card">
+      <h2>➕ Nueva tarea</h2>
+      <div class="body">
+        <input id="title" placeholder="¿Qué necesitas que haga el equipo?" />
+        <textarea id="desc" placeholder="Detalles, datos o contexto (opcional)"></textarea>
+        <div class="chips" id="chips"></div>
+        <button class="primary" id="createBtn">Asignar al equipo 🧭</button>
+      </div>
+    </div>
+
+    <div class="card alert" id="approvalsCard" hidden>
+      <h2>✋ Necesitan tu permiso</h2>
+      <div class="body" id="approvals"></div>
+    </div>
+
+    <div class="card">
+      <div class="tabs" id="tabs">
+        <button class="tab active" data-tab="missions">🗂️ Misiones</button>
+        <button class="tab" data-tab="routines">🔁 Rutinas</button>
+        <button class="tab" data-tab="team">👥 Equipo</button>
+      </div>
+      <div class="body" id="pane-missions"><div class="scroll" id="missions"></div></div>
+      <div class="body" id="pane-routines" hidden>
+        <input id="rTitle" placeholder="Título (ej: Resumen diario de noticias)" />
+        <textarea id="rDesc" placeholder="Qué debe hacer el equipo…"></textarea>
+        <div class="row" style="margin-bottom:10px">
+          <select id="rType" style="flex:1;margin:0">
+            <option value="interval">Cada X minutos</option>
+            <option value="daily">Cada día a las…</option>
+          </select>
+          <input id="rEvery" type="number" min="1" value="60" style="width:76px;margin:0" />
+          <input id="rAt" type="time" value="09:00" style="width:116px;margin:0;display:none" />
+        </div>
+        <button class="small" id="rCreate">➕ Crear rutina</button>
+        <div class="scroll" id="routines" style="margin-top:10px"></div>
+      </div>
+      <div class="body" id="pane-team" hidden><div class="scroll" id="team"></div></div>
+    </div>
+  </section>
+
+  <!-- ══ Columna principal ══ -->
+  <section class="col-main">
+    <div class="card">
+      <h2>🏢 El pueblo en vivo · oficina y parque</h2>
+      <div class="body">
+        <canvas id="town" width="832" height="448"></canvas>
+        <div class="legend" id="townLegend">Cargando el pueblo…</div>
+        <div class="pkbox" id="dialogue" hidden>
+          <div class="pkname" id="dlgName">Prof. Oak</div>
+          <div class="pktext" id="dlgText"></div>
+          <div class="pkarrow" id="dlgArrow">▼</div>
+        </div>
+        <div class="pkhint" id="dlgHint" hidden>clic en el cuadro para continuar</div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>📋 Detalle de la misión</h2>
+      <div class="body" id="detail"></div>
+    </div>
+  </section>
+</main>
+
+<script>
+const CHARS = {
+  oak:{n:'Prof. Oak',e:'🧭'}, ash:{n:'Ash',e:'🔎'}, misty:{n:'Misty',e:'📊'},
+  brock:{n:'Brock',e:'✍️'}, pikachu:{n:'Pikachu',e:'💬'}, meowth:{n:'Meowth',e:'🗓️'},
+  jessie:{n:'Jessie',e:'📣'}, james:{n:'James',e:'🗂️'}, user:{n:'Tú',e:'🧑'}, system:{n:'Sistema',e:'⚙️'}
+};
+const STATUS = { pending:'En cola', planning:'Planeando', in_progress:'Trabajando',
+  awaiting_approval:'Esperando permiso', blocked:'Bloqueada', done:'Lista', failed:'Falló' };
+const EJEMPLOS = ['Compara el clima de Madrid y Tokio','Resume 3 noticias de IA de hoy',
+  'Analiza el CSV de ventas','Redacta un correo de seguimiento'];
+const who = k => CHARS[k] ? (CHARS[k].e+' '+CHARS[k].n) : k;
+const $ = id => document.getElementById(id);
+function hace(ts){ const s=Math.floor((Date.now()-ts)/1000);
+  if(s<60) return 'hace '+s+'s'; if(s<3600) return 'hace '+Math.floor(s/60)+'m';
+  if(s<86400) return 'hace '+Math.floor(s/3600)+'h'; return 'hace '+Math.floor(s/86400)+'d'; }
+
+// Constructor de DOM seguro (textContent, sin innerHTML)
+function h(tag, props, ...kids){
+  const el = document.createElement(tag);
+  if(props) for(const [k,v] of Object.entries(props)){
+    if(k==='class') el.className=v; else if(k==='onclick') el.onclick=v;
+    else if(k==='style') el.style.cssText=v; else if(v!=null) el.setAttribute(k,v);
+  }
+  for(const kid of kids.flat()){
+    if(kid==null||kid===false) continue;
+    el.append(kid.nodeType ? kid : document.createTextNode(String(kid)));
+  }
+  return el;
+}
+const badge = s => h('span',{class:'badge b-'+s}, STATUS[s]||s);
+
+let state = { missions:[], selectedId:null, mission:null, approvals:[], routines:[] };
+const getJSON = async u => (await fetch(u)).json();
+const postJSON = async (u,b) => (await fetch(u,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(b||{})})).json();
+
+// ─────────── Sonido: jingles chiptune ORIGINALES (Web Audio, sin archivos) ───────────
+let actx=null, soundOn = localStorage.getItem('pkSound') !== 'off';
+function initAudio(){
+  if(!actx){ try { actx = new (window.AudioContext||window.webkitAudioContext)(); } catch(e){} }
+  if(actx && actx.state==='suspended') actx.resume();
+}
+function beep(freq,start,dur,type,vol){
+  if(!actx) return;
+  const o=actx.createOscillator(), g=actx.createGain(), t0=actx.currentTime+start;
+  o.type=type; o.frequency.setValueAtTime(freq,t0);
+  g.gain.setValueAtTime(0.0001,t0); g.gain.linearRampToValueAtTime(vol,t0+0.012);
+  g.gain.exponentialRampToValueAtTime(0.0008,t0+dur);
+  o.connect(g); g.connect(actx.destination); o.start(t0); o.stop(t0+dur+0.02);
+}
+function playBattleFanfare(){
+  if(!soundOn) return; initAudio(); if(!actx) return;
+  const N={E4:329.63,A4:440,C5:523.25,E5:659.25,G5:783.99,A5:880};
+  [[N.A4,0,.09],[N.C5,.09,.09],[N.E5,.18,.09],[N.A5,.27,.17],[N.G5,.47,.09],[N.E5,.56,.09],[N.A5,.65,.32]]
+    .forEach(([f,t,d])=>{ beep(f,t,d,'square',.16); beep(f/2,t,d,'triangle',.09); });
+  [[N.A4,0,.44],[N.E4,.47,.50]].forEach(([f,t,d])=>beep(f/2,t,d,'sawtooth',.06));
+}
+function playApprovalAlert(){
+  if(!soundOn) return; initAudio(); if(!actx) return;
+  const N={E5:659.25,Fs5:739.99,B5:987.77};
+  [[N.B5,0,.10],[N.Fs5,.13,.10],[N.B5,.26,.10],[N.Fs5,.39,.10],[N.E5,.54,.36]]
+    .forEach(([f,t,d])=>{ beep(f,t,d,'square',.15); beep(f/2,t,d,'triangle',.07); });
+}
+
+// ─────────── Cuadro de diálogo Pokémon (máquina de escribir) ───────────
+let dlgPages=[], dlgPage=0, dlgTimer=null;
+function stripMd(s){
+  return String(s||'').replace(/```[\s\S]*?```/g,' ').replace(/\[([^\]]+)\]\([^)]*\)/g,'$1')
+    .replace(/^\s*\|.*\|\s*$/gm,' ').replace(/[*_#>`|]/g,'').replace(/\s+/g,' ').trim();
+}
+function splitPages(text,size){
+  const words = String(text||'').replace(/\s+/g,' ').split(' ');
+  const pages=[]; let cur='';
+  for(const w of words){ if((cur+' '+w).trim().length > (size||230)){ pages.push(cur.trim()); cur=w; } else cur+=' '+w; }
+  if(cur.trim()) pages.push(cur.trim());
+  return pages.length ? pages : ['…'];
+}
+function typePage(){
+  const el=$('dlgText'), full=dlgPages[dlgPage]||'';
+  clearInterval(dlgTimer); el.textContent=''; $('dlgArrow').style.display='none';
+  let i=0;
+  dlgTimer=setInterval(()=>{ el.textContent=full.slice(0,++i);
+    if(i>=full.length){ clearInterval(dlgTimer); $('dlgArrow').style.display='block'; } },18);
+}
+function showDialogue(name,text){
+  dlgPages=splitPages(stripMd(text)); dlgPage=0;
+  $('dlgName').textContent=name; $('dialogue').hidden=false; $('dlgHint').hidden=false; typePage();
+}
+function advanceDialogue(){
+  const el=$('dlgText'), full=dlgPages[dlgPage]||'';
+  if(el.textContent.length<full.length){ clearInterval(dlgTimer); el.textContent=full; $('dlgArrow').style.display='block'; return; }
+  if(dlgPage<dlgPages.length-1){ dlgPage++; typePage(); }
+  else { $('dialogue').hidden=true; $('dlgHint').hidden=true; }
+}
+
+// ─────────── Avisos: nuevas aprobaciones y misiones completadas ───────────
+let prevApprovals=new Set(), approvalsInit=false, prevStatus={};
+function checkApprovals(){
+  const ids=new Set(state.approvals.map(a=>a._id));
+  if(approvalsInit){
+    for(const a of state.approvals){
+      if(!prevApprovals.has(a._id)){
+        const n = CHARS[a.actor]?CHARS[a.actor].n:a.actor;
+        playApprovalAlert();
+        showDialogue(n, `¡${n} necesita tu permiso! Quiere usar ${a.tool}. ${a.reason}. Revísalo en "Necesitan tu permiso".`);
+        break;
+      }
+    }
+  }
+  prevApprovals=ids; approvalsInit=true;
+}
+function checkCompletions(){
+  for(const m of state.missions){
+    const before=prevStatus[m._id];
+    if(before && before!=='done' && m.status==='done'){
+      playBattleFanfare();
+      showDialogue(CHARS[m.assignee]?CHARS[m.assignee].n:m.assignee, m.result||m.title);
+    }
+    prevStatus[m._id]=m.status;
+  }
+}
+
+// ─────────── Acciones ───────────
+async function createTask(){
+  const title=$('title').value.trim(); if(!title) return;
+  const {id} = await postJSON('/api/tasks',{title,description:$('desc').value.trim()});
+  $('title').value=''; $('desc').value=''; state.selectedId=id; setTab('missions'); await refresh();
+}
+async function resolveApproval(id,decision){ await postJSON('/api/approvals/'+id,{decision}); await refresh(); }
+function selectMission(id){ state.selectedId=id; refresh(); }
+async function createRoutine(){
+  const title=$('rTitle').value.trim(); if(!title) return;
+  await postJSON('/api/routines',{ title, description:$('rDesc').value.trim(),
+    scheduleType:$('rType').value, everyMinutes:Number($('rEvery').value)||60, at:$('rAt').value||'09:00' });
+  $('rTitle').value=''; $('rDesc').value=''; await refresh();
+}
+async function toggleRoutine(id){ await postJSON('/api/routines/'+id+'/toggle'); await refresh(); }
+async function deleteRoutine(id){ await fetch('/api/routines/'+id,{method:'DELETE'}); await refresh(); }
+
+async function refresh(){
+  state.missions  = await getJSON('/api/missions');
+  state.approvals = await getJSON('/api/approvals');
+  state.routines  = await getJSON('/api/routines');
+  await fetchAgents();
+  if(state.selectedId) state.mission = await getJSON('/api/missions/'+state.selectedId);
+  checkApprovals(); checkCompletions(); render();
+}
+
+// ─────────── Render ───────────
+function missionEl(m){
+  return h('div',{class:'item'+(m._id===state.selectedId?' active':''), onclick:()=>selectMission(m._id)},
+    h('div',{class:'t'}, m.title),
+    h('div',{class:'row',style:'margin-top:6px'}, badge(m.status),
+      h('span',{class:'muted'}, who(m.assignee)),
+      h('span',{class:'muted',style:'margin-left:auto'}, hace(m.createdAt)))
+  );
+}
+function approvalEl(a){
+  let inp={}; try{ inp=JSON.parse(a.input); }catch(e){}
+  const pre=h('pre',{});
+  for(const [k,v] of Object.entries(inp)) pre.append(h('div',{class:'k'},k+':'), document.createTextNode(String(v)+'\n'));
+  return h('div',{class:'approval'},
+    h('div',{}, h('b',{},who(a.actor)),' quiere usar ', h('b',{},a.tool)),
+    h('div',{class:'muted'}, a.reason), pre,
+    h('div',{class:'row'},
+      h('button',{class:'approve small',onclick:()=>resolveApproval(a._id,'approved')},'✓ Aprobar'),
+      h('button',{class:'reject small',onclick:()=>resolveApproval(a._id,'rejected')},'✕ Rechazar'))
+  );
+}
+function routineEl(r){
+  const s = r.schedule.type==='daily' ? ('cada día '+r.schedule.at) : ('cada '+r.schedule.everyMinutes+' min');
+  return h('div',{class:'item',style:'cursor:default'},
+    h('div',{class:'t'}, r.title),
+    h('div',{class:'row',style:'margin-top:6px'},
+      h('span',{class:'badge',style:'background:'+(r.enabled?'#cdeccb':'#eee')}, r.enabled?'Activa':'Pausada'),
+      h('span',{class:'muted'}, s)),
+    h('div',{class:'muted',style:'margin-top:4px'}, 'próxima: '+new Date(r.nextRun).toLocaleString('es')),
+    h('div',{class:'row',style:'margin-top:7px'},
+      h('button',{class:'small',onclick:()=>toggleRoutine(r._id)}, r.enabled?'⏸ Pausar':'▶ Activar'),
+      h('button',{class:'small reject',onclick:()=>deleteRoutine(r._id)},'🗑'))
+  );
+}
+function memberEl(a){
+  const busy = a.state!=='idle';
+  return h('div',{class:'member'+(a.isLeader?' lead':'')+(busy?' busy':'')},
+    h('div',{class:'avatar', style:"background-image:url('/sprites/"+a.key+".png')"}),
+    h('div',{style:'min-width:0;flex:1'},
+      h('div',{class:'who'}, (CHARS[a.key]?CHARS[a.key].e+' ':'')+(a.name||a.key), a.isLeader?' · líder':''),
+      h('div',{class:'role'}, a.role||'')),
+    h('span',{class:'badge '+(busy?'b-in_progress':'b-pending')}, busy?(a.state==='approval'?'permiso':'trabajando'):'libre')
+  );
+}
+function eventEl(e){
+  const kids=[h('span',{class:'who'},who(e.actor))];
+  if(e.target) kids.push(h('span',{class:'arrow'},' → '), document.createTextNode(who(e.target)));
+  kids.push(h('span',{class:'meta'},'  ['+e.type+']'), h('br'), document.createTextNode(e.content||''));
+  return h('div',{class:'ev '+e.type}, ...kids);
+}
+function detailEl(mi){
+  if(!mi||!mi.root) return h('div',{class:'empty'},'Selecciona una misión de la lista para ver el trabajo en vivo.');
+  const subs=(mi.tasks||[]).filter(t=>t.parentTaskId);
+  return h('div',{},
+    h('div',{class:'row',style:'justify-content:space-between'}, h('h3',{style:'margin:0'},mi.root.title), badge(mi.root.status)),
+    h('p',{class:'muted',style:'margin:4px 0 12px'}, mi.root.description||''),
+    (mi.root.status==='done'&&mi.root.result) ? h('div',{}, h('h4',{},'✅ Resultado'), h('div',{class:'result-box'},mi.root.result)) : null,
+    h('h4',{},'👥 Equipo en esta misión'),
+    h('div',{class:'team'},
+      h('div',{class:'worker lead'}, h('b',{},who(mi.root.assignee)), h('span',{class:'muted'},' · líder'), badge(mi.root.status)),
+      ...subs.map(t=>h('div',{class:'worker'}, who(t.assignee), badge(t.status), h('span',{class:'ttl'},t.title))),
+      subs.length?null:h('div',{class:'muted'},'Aún sin delegaciones…')),
+    h('details',{class:'log'}, h('summary',{},'⚡ Registro de actividad ('+((mi.events||[]).length)+')'),
+      h('div',{class:'stream',id:'stream'}, (mi.events&&mi.events.length)?mi.events.map(eventEl):h('div',{class:'muted',style:'color:#aaa'},'Sin actividad')))
+  );
+}
+function render(){
+  $('missions').replaceChildren(state.missions.length
+    ? h('div',{},...state.missions.map(missionEl))
+    : h('div',{class:'empty'},'Sin misiones todavía. Escribe una tarea arriba o usa un atajo 👆'));
+  $('routines').replaceChildren(state.routines.length
+    ? h('div',{},...state.routines.map(routineEl))
+    : h('div',{class:'empty'},'Sin rutinas. Crea una para que el equipo trabaje solo.'));
+  $('team').replaceChildren(agents.length
+    ? h('div',{},...agents.map(memberEl))
+    : h('div',{class:'empty'},'Cargando equipo…'));
+  const ac=$('approvalsCard');
+  if(state.approvals.length){ ac.hidden=false; $('approvals').replaceChildren(...state.approvals.map(approvalEl)); }
+  else ac.hidden=true;
+  $('detail').replaceChildren(detailEl(state.mission));
+}
+function setTab(name){
+  for(const b of document.querySelectorAll('.tab')) b.classList.toggle('active', b.dataset.tab===name);
+  for(const p of ['missions','routines','team']) $('pane-'+p).hidden = (p!==name);
+}
+
+// ─────────── Vista viva del pueblo: oficina (trabajando) + parque (libres) ───────────
+const TILE=32, COLS=26, ROWS=14, OFFICE_W=13;
+const OFF={floor:0,wall:1,desk:2,chair:3,plant:4,rug:5,door:6,cabinet:7};
+const TOWN={grass:0,grass2:1,tallgrass:2,path:3,water:4,flowerR:5,flowerY:6,tree:7};
+const DIRROW={down:0,left:1,right:2,up:3};
+const DESKS=[[2,3],[5,3],[8,3],[11,3],[2,8],[5,8],[8,8],[11,8]];
+const AGENT_KEYS=Object.keys(CHARS).filter(k=>!['user','system'].includes(k));
+let agents=[], actors={}, sprites={}, bg=null, lastTs=0;
+const townCanvas=$('town'), tctx=townCanvas.getContext('2d');
+const loadImg = src => new Promise(r=>{ const i=new Image(); i.onload=()=>r(i); i.onerror=()=>r(null); i.src=src; });
+const randPark = () => ({ x:((OFFICE_W+2)+Math.floor(Math.random()*(COLS-OFFICE_W-3)))*TILE,
+                          y:(1+Math.floor(Math.random()*(ROWS-3)))*TILE });
+
+async function initTown(){
+  const [oTs,tTs] = await Promise.all([loadImg('/sprites/office-tileset.png'), loadImg('/sprites/town-tileset.png')]);
+  await Promise.all(AGENT_KEYS.map(async k => { sprites[k]=await loadImg('/sprites/'+k+'.png'); }));
+  if(!oTs||!tTs) return;
+  bg=document.createElement('canvas'); bg.width=COLS*TILE; bg.height=ROWS*TILE;
+  const b=bg.getContext('2d');
+  const T=(ts,i,cx,cy)=>b.drawImage(ts,(i%8)*TILE,Math.floor(i/8)*TILE,TILE,TILE,cx*TILE,cy*TILE,TILE,TILE);
+  for(let x=0;x<OFFICE_W;x++) for(let y=0;y<ROWS;y++) T(oTs,OFF.floor,x,y);
+  for(let x=4;x<=8;x++) for(let y=5;y<=6;y++) T(oTs,OFF.rug,x,y);
+  for(const [dx,dy] of DESKS){ T(oTs,OFF.desk,dx,dy); T(oTs,OFF.chair,dx,dy+1); }
+  T(oTs,OFF.plant,0,0); T(oTs,OFF.plant,12,13); T(oTs,OFF.cabinet,0,12); T(oTs,OFF.cabinet,12,0);
+  for(let y=0;y<ROWS;y++) T(oTs,(y===6||y===7)?OFF.door:OFF.wall,OFFICE_W,y);
+  for(let x=OFFICE_W+1;x<COLS;x++) for(let y=0;y<ROWS;y++){
+    const hh=(x*7+y*13)%11; T(tTs, hh<1?TOWN.flowerY : hh<2?TOWN.grass2 : TOWN.grass, x, y);
+  }
+  for(let y=5;y<=8;y++) T(tTs,TOWN.path,OFFICE_W+1,y);
+  for(let x=21;x<=24;x++) for(let y=9;y<=12;y++) T(tTs,TOWN.water,x,y);
+  for(const [tx,ty] of [[15,1],[18,2],[24,1],[16,12],[19,6],[25,8]]) T(tTs,TOWN.tree,tx,ty);
+  requestAnimationFrame(tick);
+}
+function ensureActor(key){
+  if(actors[key]) return actors[key];
+  const p=randPark();
+  return (actors[key]={x:p.x,y:p.y,tx:p.x,ty:p.y,dir:'down',t:0,moving:false,desk:AGENT_KEYS.indexOf(key),nextWander:0});
+}
+function drawBubble(cx,topY,text){
+  const raw=String(text).replace(/\s+/g,' ').trim();
+  const t = raw.length>30 ? raw.slice(0,30)+'…' : raw;
+  tctx.font='9px system-ui';
+  const w=Math.min(180,tctx.measureText(t).width+14), hgt=17;
+  const bx=Math.max(2,Math.min(townCanvas.width-w-2,cx-w/2)), by=Math.max(2,topY-hgt-8);
+  tctx.fillStyle='#f8f4e3'; tctx.strokeStyle='#2b3a55'; tctx.lineWidth=2;
+  tctx.beginPath(); tctx.roundRect(bx,by,w,hgt,5); tctx.fill(); tctx.stroke();
+  tctx.beginPath(); tctx.moveTo(cx-4,by+hgt-1); tctx.lineTo(cx,by+hgt+5); tctx.lineTo(cx+4,by+hgt-1);
+  tctx.closePath(); tctx.fillStyle='#f8f4e3'; tctx.fill();
+  tctx.fillStyle='#2b3a55'; tctx.textAlign='center'; tctx.fillText(t,bx+w/2,by+12); tctx.textAlign='left';
+}
+function drawActor(a,ac){
+  const img=sprites[a.key];
+  const frame = ac.moving ? (Math.floor(ac.t/150)%3) : 1;
+  if(img) tctx.drawImage(img,frame*32,(DIRROW[ac.dir]||0)*32,32,32,Math.round(ac.x),Math.round(ac.y),32,32);
+  if(a.state!=='idle' && a.lastEvent && a.lastEvent.content) drawBubble(ac.x+16,ac.y,a.lastEvent.content);
+  const icon = a.state==='approval'?'✋' : a.state==='working'?'💻' : '';
+  if(icon){ tctx.font='15px system-ui'; tctx.textAlign='left'; tctx.fillStyle='#2b3a55'; tctx.fillText(icon,ac.x+18,ac.y+6); }
+  tctx.font='9px system-ui'; tctx.textAlign='center';
+  tctx.fillStyle = a.state==='idle' ? 'rgba(0,0,0,.5)' : '#1f6f2f';
+  tctx.fillRect(ac.x-6,ac.y+32,44,12);
+  tctx.fillStyle='#fff'; tctx.fillText(CHARS[a.key]?CHARS[a.key].n:a.key, ac.x+16, ac.y+41);
+  tctx.textAlign='left';
+}
+function tick(ts){
+  const dt=Math.min(60,ts-lastTs)||16; lastTs=ts;
+  tctx.clearRect(0,0,townCanvas.width,townCanvas.height);
+  if(bg) tctx.drawImage(bg,0,0);
+  for(const a of agents){
+    const ac=ensureActor(a.key);
+    if(a.state==='working'||a.state==='approval'){
+      const d=DESKS[(ac.desk<0?0:ac.desk)%DESKS.length]; ac.tx=d[0]*TILE; ac.ty=(d[1]+1)*TILE;
+    } else {
+      const enOficina = ac.tx < OFFICE_W*TILE;
+      if(enOficina || (ts>ac.nextWander && Math.hypot(ac.tx-ac.x,ac.ty-ac.y)<3)){
+        const p=randPark(); ac.tx=p.x; ac.ty=p.y; ac.nextWander=ts+3000+Math.random()*5000;
+      }
+    }
+    const ddx=ac.tx-ac.x, ddy=ac.ty-ac.y, dist=Math.hypot(ddx,ddy);
+    ac.moving = dist>2;
+    if(ac.moving){
+      const step=Math.min(dist,0.12*dt);
+      ac.x+=ddx/dist*step; ac.y+=ddy/dist*step;
+      ac.dir = Math.abs(ddx)>Math.abs(ddy) ? (ddx>0?'right':'left') : (ddy>0?'down':'up');
+      ac.t+=dt;
+    }
+    drawActor(a,ac);
+  }
+  requestAnimationFrame(tick);
+}
+async function fetchAgents(){
+  try {
+    agents = await getJSON('/api/agents');
+    const w = agents.filter(a=>a.state!=='idle').length;
+    $('townLegend').textContent = `🏢 ${w} trabajando en la oficina · 🌳 ${agents.length-w} en el parque`;
+    $('working').textContent = w ? `⚙️ ${w} trabajando` : '☕ equipo libre';
+  } catch(e){}
+}
+
+// ─────────── Tiempo real (SSE) ───────────
+function connect(){
+  const es=new EventSource('/api/stream'), live=$('live');
+  es.onopen=()=>{ live.textContent='● en vivo'; live.style.background='rgba(120,220,120,.5)'; };
+  es.onerror=()=>{ live.textContent='● reconectando…'; live.style.background='rgba(255,180,180,.5)'; };
+  let t=null; es.onmessage=()=>{ clearTimeout(t); t=setTimeout(refresh,120); };
+}
+
+// ─────────── Arranque ───────────
+$('chips').replaceChildren(...EJEMPLOS.map(x =>
+  h('button',{class:'chip', onclick:()=>{ $('title').value=x; $('title').focus(); }}, x)));
+$('createBtn').onclick = createTask;
+$('title').addEventListener('keydown', e => { if(e.key==='Enter') createTask(); });
+$('rCreate').onclick = createRoutine;
+$('rType').addEventListener('change', e => {
+  const daily = e.target.value==='daily';
+  $('rEvery').style.display = daily?'none':''; $('rAt').style.display = daily?'':'none';
+});
+$('tabs').addEventListener('click', e => { const b=e.target.closest('.tab'); if(b) setTab(b.dataset.tab); });
+$('dialogue').onclick = advanceDialogue;
+$('sound').textContent = soundOn ? '🔊' : '🔇';
+$('sound').onclick = () => {
+  soundOn=!soundOn; localStorage.setItem('pkSound', soundOn?'on':'off');
+  $('sound').textContent = soundOn?'🔊':'🔇';
+  if(soundOn){ initAudio(); playBattleFanfare(); }
+};
+document.addEventListener('click', initAudio, { once:true });
+
+refresh(); connect(); initTown();
+setInterval(fetchAgents, 2500);
+</script>
+</body>
+</html>
