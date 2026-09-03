@@ -740,13 +740,18 @@ function drawActor(a,ac){
       tctx.closePath(); tctx.fill(); tctx.restore();
     }
   }
-  // sombra elíptica: da sensación de peso y de estar sobre el suelo
-  tctx.save(); tctx.globalAlpha=.22; tctx.fillStyle='#000';
-  tctx.beginPath(); tctx.ellipse(ac.x+16, ac.y+30, 9.5, 3.5, 0, 0, Math.PI*2); tctx.fill(); tctx.restore();
+  // sombra elíptica: da sensación de peso (no si está sentado)
+  if(!ac.sentado){
+    tctx.save(); tctx.globalAlpha=.22; tctx.fillStyle='#000';
+    tctx.beginPath(); tctx.ellipse(ac.x+16, ac.y+30, 9.5, 3.5, 0, 0, Math.PI*2); tctx.fill(); tctx.restore();
+  }
   const img=spriteFor(a);
-  const frame = ac.moving ? (Math.floor(ac.t/150)%3) : 1;
-  if(img) tctx.drawImage(img, frame*SPR, (DIRROW[ac.dir]||0)*SPR, SPR, SPR,
-                        Math.round(ac.x)+SPR_DX, Math.round(ac.y)+SPR_DY, SPR, SPR);
+  const sentado = !!ac.sentado;
+  const frame = sentado ? 1 : (ac.moving ? (Math.floor(ac.t/150)%3) : 1);
+  // sentado: se recorta la mitad inferior, así las piernas quedan tras la silla
+  const alto = sentado ? 34 : SPR;
+  if(img) tctx.drawImage(img, frame*SPR, (DIRROW[ac.dir]||0)*SPR, SPR, alto,
+                        Math.round(ac.x)+SPR_DX, Math.round(ac.y)+SPR_DY, SPR, alto);
   if(a.state!=='idle' && a.lastEvent && a.lastEvent.content) drawBubble(ac.x+16,ac.y,a.lastEvent.content);
   const icon = a.state==='approval'?'✋' : a.state==='working'?'💻' : '';
   if(icon){ tctx.font='15px system-ui'; tctx.textAlign='left'; tctx.fillStyle='#2b3a55'; tctx.fillText(icon,ac.x+26,ac.y-4); }
@@ -777,7 +782,11 @@ function tick(ts){
     const ac=ensureActor(a.key);
     if(a.state==='working'||a.state==='approval'){
       const d=DESKS[(ac.desk<0?0:ac.desk)%DESKS.length]; ac.tx=d[0]*TILE; ac.ty=(d[1]+1)*TILE;
+      // ya llegó a su sitio → se sienta mirando al monitor
+      ac.sentado = Math.hypot(ac.tx-ac.x, ac.ty-ac.y) < 3;
+      if(ac.sentado) ac.dir='up';
     } else {
+      ac.sentado = false;
       const enOficina = ac.tx < OFFICE_W*TILE;
       if(enOficina || (ts>ac.nextWander && Math.hypot(ac.tx-ac.x,ac.ty-ac.y)<3)){
         const p=randPark(); ac.tx=p.x; ac.ty=p.y; ac.nextWander=ts+3000+Math.random()*5000;
