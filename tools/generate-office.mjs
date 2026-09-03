@@ -48,18 +48,32 @@ const tiles = {
     for (let x = 0; x < 32; x++) { p(x, 0, C.wallTop); p(x, 1, C.wallTop); p(x, 31, C.wallTop); }
     for (let x = 2; x < 30; x += 8) for (let y = 4; y < 28; y++) p(x, y, C.wallHi);
   },
-  desk(p) {
+  // Escritorio de DOS baldosas: una persona mide ~1,4 baldosas, así que un
+  // escritorio de una sola quedaba ridículamente pequeño a su lado.
+  deskL(p) {
     tiles.floor(p);
-    // superficie del escritorio
-    for (let y = 8; y <= 28; y++) for (let x = 2; x <= 29; x++) p(x, y, C.desk);
-    for (let x = 2; x <= 29; x++) { p(x, 8, C.deskHi); p(x, 28, C.deskDark); }
-    for (let y = 8; y <= 28; y++) { p(2, y, C.deskDark); p(29, y, C.deskDark); }
+    for (let y = 6; y <= 29; y++) for (let x = 3; x <= 31; x++) p(x, y, C.desk);
+    for (let x = 3; x <= 31; x++) { p(x, 6, C.deskHi); p(x, 29, C.deskDark); }
+    for (let y = 6; y <= 29; y++) p(3, y, C.deskDark);          // borde izquierdo
     // monitor
-    for (let y = 10; y <= 18; y++) for (let x = 9; x <= 22; x++) p(x, y, C.screen);
-    for (let y = 11; y <= 16; y++) for (let x = 10; x <= 21; x++) p(x, y, C.screenOn);
+    for (let y = 8; y <= 19; y++) for (let x = 10; x <= 27; x++) p(x, y, C.screen);
+    for (let y = 9; y <= 17; y++) for (let x = 11; x <= 26; x++) p(x, y, C.screenOn);
+    for (let x = 16; x <= 21; x++) { p(x, 20, C.screen); p(x, 21, C.screen); }  // pie
+    for (let x = 13; x <= 24; x++) p(x, 22, C.chairDark);       // base
+  },
+  deskR(p) {
+    tiles.floor(p);
+    for (let y = 6; y <= 29; y++) for (let x = 0; x <= 28; x++) p(x, y, C.desk);
+    for (let x = 0; x <= 28; x++) { p(x, 6, C.deskHi); p(x, 29, C.deskDark); }
+    for (let y = 6; y <= 29; y++) p(28, y, C.deskDark);         // borde derecho
     // teclado
-    for (let y = 21; y <= 24; y++) for (let x = 10; x <= 21; x++) p(x, y, C.keys);
-    for (let x = 11; x <= 20; x += 2) p(x, 22, C.chairDark);
+    for (let y = 20; y <= 25; y++) for (let x = 3; x <= 20; x++) p(x, y, C.keys);
+    for (let x = 5; x <= 18; x += 3) { p(x, 21, C.chairDark); p(x, 23, C.chairDark); }
+    // papeles y taza
+    for (let y = 9; y <= 15; y++) for (let x = 4; x <= 13; x++) p(x, y, [246, 244, 236]);
+    for (let x = 5; x <= 12; x++) p(x, 11, C.floorLine);
+    for (let y = 10; y <= 16; y++) for (let x = 19; x <= 25; x++) p(x, y, C.rug);
+    for (let x = 20; x <= 24; x++) p(x, 10, [246, 244, 236]);
   },
   chair(p) {
     tiles.floor(p);
@@ -96,21 +110,22 @@ const tiles = {
   },
 };
 
-const ORDER = ['floor', 'wall', 'desk', 'chair', 'plant', 'rug', 'door', 'cabinet'];
+const ORDER = ['floor', 'wall', 'deskL', 'chair', 'plant', 'rug', 'door', 'cabinet', 'deskR'];
 const COLS = 8;
-const c = new Canvas(COLS * 32, 32);
+const ROWS = Math.ceil(ORDER.length / COLS);   // varias filas si hacen falta
+const c = new Canvas(COLS * 32, ROWS * 32);
 ORDER.forEach((name, i) => {
-  const ox = (i % COLS) * 32, oy = 0;
+  const ox = (i % COLS) * 32, oy = Math.floor(i / COLS) * 32;
   tiles[name]((lx, ly, col) => c.set(ox + lx, oy + ly, col));
 });
 fs.mkdirSync(OUT, { recursive: true });
 fs.writeFileSync(path.join(OUT, 'office-tileset.png'), c.png());
-console.log(`✔ office-tileset.png (${COLS * 32}x32) — tiles: ${ORDER.join(', ')}`);
+console.log(`✔ office-tileset.png (${COLS * 32}x${ROWS * 32}) — tiles: ${ORDER.join(', ')}`);
 
 // preview ampliado x4 para inspección
 const S = 4;
-const prev = new Canvas(COLS * 32 * S, 32 * S);
-for (let y = 0; y < 32; y++) for (let x = 0; x < COLS * 32; x++) {
+const prev = new Canvas(COLS * 32 * S, ROWS * 32 * S);
+for (let y = 0; y < ROWS * 32; y++) for (let x = 0; x < COLS * 32; x++) {
   const si = (y * COLS * 32 + x) * 4;
   const col = [c.buf[si], c.buf[si + 1], c.buf[si + 2], c.buf[si + 3]];
   for (let dy = 0; dy < S; dy++) for (let dx = 0; dx < S; dx++) prev.set(x * S + dx, y * S + dy, col);
