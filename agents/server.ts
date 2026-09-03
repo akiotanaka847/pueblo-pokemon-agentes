@@ -72,6 +72,7 @@ export function startServer() {
       return { ...s, name: r?.name ?? s.key, role: r?.role ?? '', bio: r?.bio ?? '', sprite: r?.sprite ?? s.key,
                isLeader: s.key === 'oak', custom: !!r?.custom,
                hasInstructions: !!propios[s.key]?.instructions,
+               instructions: propios[s.key]?.instructions ?? undefined,
                files: propios[s.key]?.files || [] };
     }));
   });
@@ -90,7 +91,30 @@ export function startServer() {
       instructions: String(instructions || ''),
     }));
   });
+  app.get('/api/roster/:key', (req, res) => {
+    const a = cx.getAgent(req.params.key);
+    return a ? res.json(a) : res.status(404).json({ error: 'no encontrado' });
+  });
+  app.patch('/api/roster/:key', (req, res) => {
+    const { role, personality, instructions } = req.body || {};
+    const cambios: any = {};
+    if (role !== undefined) cambios.role = String(role);
+    if (personality !== undefined) cambios.personality = String(personality);
+    if (instructions !== undefined) cambios.instructions = String(instructions);
+    const a = cx.updateAgent(req.params.key, cambios);
+    return a ? res.json(a) : res.status(404).json({ error: 'no encontrado' });
+  });
   app.delete('/api/roster/:key', (req, res) => { cx.deleteAgent(req.params.key); res.json({ ok: true }); });
+
+  // Quitar un archivo de contexto (lo borra del disco y de la ficha)
+  app.delete('/api/roster/:key/files/:filename', (req, res) => {
+    const key = String(req.params.key).replace(/[^a-z0-9-]/gi, '');
+    const safe = path.basename(String(req.params.filename));
+    const f = path.join(__dirname, 'data', key, safe);
+    try { if (fs.existsSync(f)) fs.unlinkSync(f); } catch {}
+    cx.removeAgentFile(key, safe);
+    res.json({ ok: true });
+  });
 
   // Adjuntar un archivo de contexto a un agente (llega en base64 desde el tablero).
   app.post('/api/roster/:key/files', (req, res) => {

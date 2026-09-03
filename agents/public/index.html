@@ -133,6 +133,13 @@
   .prof .bio { margin:8px 0 0; font-size:13px; line-height:1.55; color:var(--ink-soft); }
   .prof .now { margin-top:8px; font-size:13px; background:#f4f2e9; border:2px solid var(--line);
     border-radius:9px; padding:7px 9px; }
+  .cfg { margin-top:10px; border-top:2px dashed var(--line); padding-top:10px; }
+  .cfg summary { cursor:pointer; font-weight:700; font-size:12.5px; color:var(--ink-soft);
+    list-style:none; padding:2px 0; }
+  .cfg summary::-webkit-details-marker { display:none; }
+  .filerow { display:flex; align-items:center; gap:8px; font-size:12px; padding:5px 8px;
+    background:#f4f2e9; border:2px solid var(--line); border-radius:8px; margin-bottom:5px; }
+  .filerow .nm { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   #town { cursor:pointer; }
 
   /* ── Modo visita ── */
@@ -578,12 +585,50 @@ let visiting = null, myVillageInfo = null, villages = [];
 let selectedAgent = null;
 
 function selectAgent(key){ selectedAgent = key; renderProfile(); }
+// Panel para editar el manual y gestionar los archivos de un agente propio
+function panelConfig(a, abierto){
+  const lista = h('div',{});
+  (a.files||[]).forEach(f => lista.append(
+    h('div',{class:'filerow'},
+      h('span',{class:'nm'}, '📎 '+f),
+      h('button',{class:'small reject', title:'Quitar', onclick:()=>quitarArchivo(a.key,f)},'✕'))));
+  if(!(a.files||[]).length) lista.append(h('div',{class:'muted'},'Sin archivos adjuntos.'));
+
+  return h('details', abierto ? {class:'cfg', open:''} : {class:'cfg'},
+    h('summary',{},'⚙️ Configurar manual y archivos'),
+    h('div',{style:'margin-top:8px'},
+      h('div',{class:'muted',style:'margin-bottom:4px'},'📄 Manual de tareas (Markdown):'),
+      h('textarea',{id:'cfgInstr', style:'min-height:130px;font-family:ui-monospace,Menlo,monospace;font-size:12px',
+        placeholder:'## Tareas principales\n- …'}, a.instructions || ''),
+      h('button',{class:'small', onclick:()=>guardarManual(a.key)},'💾 Guardar manual'),
+      h('div',{class:'muted',style:'margin:12px 0 4px'},'📎 Archivos de contexto:'),
+      lista,
+      h('input',{type:'file', id:'cfgFiles', multiple:'', style:'padding:6px;font-size:12px;margin-top:6px'}),
+      h('button',{class:'small', onclick:()=>subirArchivos(a.key)},'⬆️ Adjuntar')));
+}
+async function guardarManual(key){
+  await fetch('/api/roster/'+key, { method:'PATCH', headers:{'content-type':'application/json'},
+    body: JSON.stringify({ instructions: $('cfgInstr').value }) });
+  await refresh();
+}
+async function subirArchivos(key){
+  const files = Array.from($('cfgFiles').files || []); if(!files.length) return;
+  for (const f of files) await postJSON('/api/roster/'+key+'/files',
+    { filename:f.name, contentBase64: await leerBase64(f) });
+  await refresh();
+}
+async function quitarArchivo(key, filename){
+  await fetch('/api/roster/'+key+'/files/'+encodeURIComponent(filename), { method:'DELETE' });
+  await refresh();
+}
+
 function renderProfile(){
   const card = $('profileCard');
   const a = agents.find(x => x.key === selectedAgent);
   if(!a){ card.hidden = true; return; }
   card.hidden = false;
   const busy = a.state !== 'idle';
+  const abierto = document.querySelector('.cfg')?.open;   // conserva el panel abierto al refrescar
   const estado = busy ? (a.state==='approval' ? 'esperando permiso' : 'trabajando') : 'libre';
   $('profile').replaceChildren(h('div',{class:'prof'},
     h('div',{class:'bigavatar', style:"background-image:url('/sprites/"+(a.sprite||a.key)+".png')"}),
@@ -598,7 +643,8 @@ function renderProfile(){
       (a.files && a.files.length) ? h('div',{class:'muted',style:'margin-top:4px'}, '📎 Archivos: '+a.files.join(', ')) : null,
       a.task ? h('div',{class:'now'}, h('b',{},'Ahora mismo: '), a.task) : null,
       (a.lastEvent && a.lastEvent.content) ? h('div',{class:'muted',style:'margin-top:6px'}, '💬 '+a.lastEvent.content) : null,
-      visiting ? h('div',{class:'muted',style:'margin-top:6px'}, 'De la aldea '+visiting.name) : null),
+      visiting ? h('div',{class:'muted',style:'margin-top:6px'}, 'De la aldea '+visiting.name) : null,
+      (a.custom && !visiting) ? panelConfig(a, abierto) : null),
     h('button',{class:'small reject', title:'Cerrar', onclick:()=>{ selectedAgent=null; renderProfile(); }},'✕')
   ));
 }
