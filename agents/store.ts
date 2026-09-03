@@ -52,6 +52,16 @@ export interface Approval {
   resolvedAt?: number;
 }
 
+export interface CustomAgent {
+  key: string;          // identificador único (slug)
+  name: string;         // nombre visible
+  role: string;         // especialidad corta (para que el líder sepa a quién delegar)
+  personality: string;  // cómo habla y actúa (se usa en su prompt)
+  sprite: string;       // qué sprite usa en el pueblo
+  brain?: string;       // cerebro propio (opcional)
+  createdAt: number;
+}
+
 export interface Routine {
   _id: string;
   title: string;
@@ -68,6 +78,7 @@ interface DB {
   events: TaskEvent[];
   approvals: Approval[];
   routines: Routine[];
+  customAgents: CustomAgent[];
 }
 
 const db: DB = load();
@@ -76,11 +87,11 @@ export const bus = new EventEmitter();
 function load(): DB {
   try {
     if (fs.existsSync(DB_FILE))
-      return { tasks: [], events: [], approvals: [], routines: [], ...JSON.parse(fs.readFileSync(DB_FILE, 'utf8')) };
+      return { tasks: [], events: [], approvals: [], routines: [], customAgents: [], ...JSON.parse(fs.readFileSync(DB_FILE, 'utf8')) };
   } catch (e) {
     console.error('No se pudo leer db.json, empezando vacío:', (e as any).message);
   }
-  return { tasks: [], events: [], approvals: [], routines: [] };
+  return { tasks: [], events: [], approvals: [], routines: [], customAgents: [] };
 }
 
 function computeNext(schedule: Routine['schedule'], from = Date.now()): number {
@@ -244,6 +255,20 @@ export const cx = {
       };
     });
   },
+
+  // ── agentes personalizados (los que crea el usuario) ──
+  createAgent(a: { name: string; role: string; personality: string; sprite: string; brain?: string }): CustomAgent {
+    const base = a.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'agente';
+    let key = base, n = 2;
+    const usados = new Set(db.customAgents.map((x) => x.key));
+    while (usados.has(key)) key = `${base}-${n++}`;
+    const ag: CustomAgent = { key, name: a.name, role: a.role, personality: a.personality,
+      sprite: a.sprite, brain: a.brain, createdAt: now() };
+    db.customAgents.push(ag); persist(); return ag;
+  },
+  listCustomAgents(): CustomAgent[] { return db.customAgents.slice().sort((a, b) => a.createdAt - b.createdAt); },
+  deleteAgent(key: string) { db.customAgents = db.customAgents.filter((x) => x.key !== key); persist(); },
 
   // ── consultas para la UI ──
   listMissions(): Task[] {

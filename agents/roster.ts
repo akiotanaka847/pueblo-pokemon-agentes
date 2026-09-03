@@ -2,21 +2,25 @@
 // El líder (Oak) orquesta y delega; los demás son trabajadores especializados.
 
 import type { BrainId } from './brains';
+import { cx } from './store';
 
-export type CharacterKey =
-  | 'oak' | 'ash' | 'misty' | 'brock' | 'pikachu' | 'meowth' | 'jessie' | 'james';
+export type CharacterKey = string;
 
 export const LEADER: CharacterKey = 'oak';
 
-export const workerKeys = ['ash', 'misty', 'brock', 'pikachu', 'meowth', 'jessie', 'james'] as const;
 
-interface Role {
+
+export interface Role {
   name: string;
   role: string; // descripción corta (para que el líder sepa a quién delegar)
   systemPrompt: string;
   // Cerebro (LLM) de este personaje. Si se omite, usa el cerebro global (BRAIN en .env).
   // Ejemplo: pon `brain: 'openai'` a Ash para que él use OpenAI y el resto Claude.
   brain?: BrainId;
+  // Sprite que usa en el pueblo (por defecto, su propia clave).
+  sprite?: string;
+  // true si lo creó el usuario (no viene de fábrica).
+  custom?: boolean;
 }
 
 const SHARED = `Trabajas en el "Pueblo Pokémon", un equipo de agentes de IA que ejecutan tareas reales para el usuario.
@@ -24,7 +28,7 @@ Herramientas disponibles: fetch_url (descargar webs/APIs), read_data (leer archi
 write_note (guardar informes localmente) y send_message (enviar un correo/mensaje EXTERNO — SIEMPRE requiere aprobación del humano).
 Usa las herramientas cuando aporten datos reales; no inventes información que puedas verificar. Responde en español y sé conciso.`;
 
-export const roster: Record<CharacterKey, Role> = {
+const builtinRoster: Record<string, Role> = {
   oak: {
     name: 'Profesor Oak',
     role: 'Líder / Orquestador',
@@ -76,3 +80,27 @@ Eres teatral pero entregas contenido sólido. ${SHARED}`,
 Eres metódico. ${SHARED}`,
   },
 };
+
+
+// ── Roster dinámico: los 8 de fábrica + los que creas tú ──
+export function getRoster(): Record<string, Role> {
+  const out: Record<string, Role> = {};
+  for (const [k, v] of Object.entries(builtinRoster)) out[k] = { ...v, sprite: v.sprite || k };
+  for (const a of cx.listCustomAgents()) {
+    out[a.key] = {
+      name: a.name,
+      role: a.role,
+      systemPrompt: `Eres ${a.name}, parte del equipo del Pueblo Pokémon. ${a.personality}\n` +
+        `Tu especialidad es: ${a.role}. ${SHARED}`,
+      brain: a.brain as BrainId | undefined,
+      sprite: a.sprite,
+      custom: true,
+    };
+  }
+  return out;
+}
+
+// Todos menos el líder: son los que pueden recibir delegaciones.
+export function getWorkerKeys(): string[] {
+  return Object.keys(getRoster()).filter((k) => k !== LEADER);
+}

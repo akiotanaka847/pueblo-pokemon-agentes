@@ -106,6 +106,12 @@
     background-color:#dceccf; background-repeat:no-repeat; background-position:-31px -1px;
     border:2px solid var(--line); }
   .member .who { font-weight:700; font-size:13px; }
+  .spick { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:8px; }
+  .spick .avatar { cursor:pointer; }
+  .spick .avatar.sel { border-color:var(--red); box-shadow:0 0 0 2px var(--red); }
+  .newagent summary { cursor:pointer; font-weight:700; font-size:12.5px; color:var(--ink-soft);
+    list-style:none; padding:4px 0; }
+  .newagent summary::-webkit-details-marker { display:none; }
   .member .role { font-size:11px; color:var(--gray); line-height:1.3; }
 
   /* ── Aprobaciones ── */
@@ -213,7 +219,20 @@
         <button class="small" id="rCreate">➕ Crear rutina</button>
         <div class="scroll" id="routines" style="margin-top:10px"></div>
       </div>
-      <div class="body" id="pane-team" hidden><div class="scroll" id="team"></div></div>
+      <div class="body" id="pane-team" hidden>
+        <details class="newagent">
+          <summary>➕ Crear un agente nuevo</summary>
+          <div style="margin-top:8px">
+            <input id="aName" placeholder="Nombre (ej: Gary)" />
+            <input id="aRole" placeholder="Especialidad (ej: Análisis de la competencia)" />
+            <textarea id="aPers" placeholder="Personalidad: cómo habla, cómo actúa, sus manías…"></textarea>
+            <div class="muted" style="margin-bottom:6px">Elige su aspecto:</div>
+            <div class="spick" id="aSprites"></div>
+            <button class="small" id="aCreate">Añadir al equipo</button>
+          </div>
+        </details>
+        <div class="scroll" id="team"></div>
+      </div>
     </div>
   </section>
 
@@ -249,7 +268,11 @@ const STATUS = { pending:'En cola', planning:'Planeando', in_progress:'Trabajand
   awaiting_approval:'Esperando permiso', blocked:'Bloqueada', done:'Lista', failed:'Falló' };
 const EJEMPLOS = ['Compara el clima de Madrid y Tokio','Resume 3 noticias de IA de hoy',
   'Analiza el CSV de ventas','Redacta un correo de seguimiento'];
-const who = k => CHARS[k] ? (CHARS[k].e+' '+CHARS[k].n) : k;
+const who = k => {
+  if (CHARS[k]) return CHARS[k].e+' '+CHARS[k].n;
+  const a = (typeof agents !== 'undefined' ? agents : []).find(x => x.key === k);
+  return a ? '🧩 '+a.name : k;
+};
 const $ = id => document.getElementById(id);
 function hace(ts){ const s=Math.floor((Date.now()-ts)/1000);
   if(s<60) return 'hace '+s+'s'; if(s<3600) return 'hace '+Math.floor(s/60)+'m';
@@ -374,6 +397,28 @@ async function createRoutine(){
     scheduleType:$('rType').value, everyMinutes:Number($('rEvery').value)||60, at:$('rAt').value||'09:00' });
   $('rTitle').value=''; $('rDesc').value=''; await refresh();
 }
+let spriteOpts = [], spriteSel = 'tu-entrenador';
+async function loadSpriteOptions(){
+  try { spriteOpts = await getJSON('/api/sprites'); } catch(e) { spriteOpts = []; }
+  renderSpritePicker();
+}
+function renderSpritePicker(){
+  $('aSprites').replaceChildren(...spriteOpts.map(sp =>
+    h('div',{ class:'avatar'+(sp===spriteSel?' sel':''), title:sp,
+      style:"background-image:url('/sprites/"+sp+".png')",
+      onclick:()=>{ spriteSel = sp; renderSpritePicker(); } })));
+}
+async function createAgent(){
+  const name = $('aName').value.trim(); if(!name) return;
+  await postJSON('/api/roster', { name, role:$('aRole').value.trim(),
+    personality:$('aPers').value.trim(), sprite:spriteSel });
+  $('aName').value=''; $('aRole').value=''; $('aPers').value='';
+  await refresh();
+}
+async function deleteAgent(key){
+  await fetch('/api/roster/'+key, { method:'DELETE' });
+  await refresh();
+}
 async function toggleRoutine(id){ await postJSON('/api/routines/'+id+'/toggle'); await refresh(); }
 async function deleteRoutine(id){ await fetch('/api/routines/'+id,{method:'DELETE'}); await refresh(); }
 
@@ -423,11 +468,13 @@ function routineEl(r){
 function memberEl(a){
   const busy = a.state!=='idle';
   return h('div',{class:'member'+(a.isLeader?' lead':'')+(busy?' busy':'')},
-    h('div',{class:'avatar', style:"background-image:url('/sprites/"+a.key+".png')"}),
+    h('div',{class:'avatar', style:"background-image:url('/sprites/"+(a.sprite||a.key)+".png')"}),
     h('div',{style:'min-width:0;flex:1'},
-      h('div',{class:'who'}, (CHARS[a.key]?CHARS[a.key].e+' ':'')+(a.name||a.key), a.isLeader?' · líder':''),
+      h('div',{class:'who'}, (CHARS[a.key]?CHARS[a.key].e+' ':(a.custom?'🧩 ':''))+(a.name||a.key), a.isLeader?' · líder':''),
       h('div',{class:'role'}, a.role||'')),
-    h('span',{class:'badge '+(busy?'b-in_progress':'b-pending')}, busy?(a.state==='approval'?'permiso':'trabajando'):'libre')
+    h('span',{class:'badge '+(busy?'b-in_progress':'b-pending')}, busy?(a.state==='approval'?'permiso':'trabajando'):'libre'),
+    a.custom ? h('button',{class:'small reject', style:'padding:3px 7px', title:'Quitar del equipo',
+      onclick:()=>deleteAgent(a.key)},'🗑') : null
   );
 }
 function eventEl(e){
@@ -522,8 +569,13 @@ function drawBubble(cx,topY,text){
   tctx.closePath(); tctx.fillStyle='#f8f4e3'; tctx.fill();
   tctx.fillStyle='#2b3a55'; tctx.textAlign='center'; tctx.fillText(t,bx+w/2,by+12); tctx.textAlign='left';
 }
+function spriteFor(a){
+  const k = a.sprite || a.key;
+  if (sprites[k] === undefined) { sprites[k] = null; loadImg('/sprites/'+k+'.png').then(i => { sprites[k] = i; }); }
+  return sprites[k];
+}
 function drawActor(a,ac){
-  const img=sprites[a.key];
+  const img=spriteFor(a);
   const frame = ac.moving ? (Math.floor(ac.t/150)%3) : 1;
   if(img) tctx.drawImage(img,frame*32,(DIRROW[ac.dir]||0)*32,32,32,Math.round(ac.x),Math.round(ac.y),32,32);
   if(a.state!=='idle' && a.lastEvent && a.lastEvent.content) drawBubble(ac.x+16,ac.y,a.lastEvent.content);
@@ -532,7 +584,7 @@ function drawActor(a,ac){
   tctx.font='9px system-ui'; tctx.textAlign='center';
   tctx.fillStyle = a.state==='idle' ? 'rgba(0,0,0,.5)' : '#1f6f2f';
   tctx.fillRect(ac.x-6,ac.y+32,44,12);
-  tctx.fillStyle='#fff'; tctx.fillText(CHARS[a.key]?CHARS[a.key].n:a.key, ac.x+16, ac.y+41);
+  tctx.fillStyle='#fff'; tctx.fillText(a.name || (CHARS[a.key]?CHARS[a.key].n:a.key), ac.x+16, ac.y+41);
   tctx.textAlign='left';
 }
 function tick(ts){
@@ -584,6 +636,8 @@ $('chips').replaceChildren(...EJEMPLOS.map(x =>
 $('createBtn').onclick = createTask;
 $('title').addEventListener('keydown', e => { if(e.key==='Enter') createTask(); });
 $('rCreate').onclick = createRoutine;
+$('aCreate').onclick = createAgent;
+loadSpriteOptions();
 $('rType').addEventListener('change', e => {
   const daily = e.target.value==='daily';
   $('rEvery').style.display = daily?'none':''; $('rAt').style.display = daily?'':'none';

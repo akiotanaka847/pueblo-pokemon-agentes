@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { cx, TaskId } from './store';
-import { roster, LEADER, workerKeys, CharacterKey } from './roster';
+import { getRoster, getWorkerKeys, LEADER, CharacterKey } from './roster';
 import { getModel } from './brains';
 import { initMcp, buildMcpTools } from './mcp';
 import { initComposio, buildComposioTools } from './composio';
@@ -121,7 +121,7 @@ function makeTools(ctx: { taskId: TaskId; actor: CharacterKey; isLeader: boolean
     tools.delegate = tool({
       description: 'Delega una subtarea a un agente trabajador del pueblo y espera su resultado.',
       inputSchema: z.object({
-        worker: z.enum(workerKeys as unknown as [string, ...string[]]).describe('clave del trabajador'),
+        worker: z.enum(getWorkerKeys() as [string, ...string[]]).describe('clave del trabajador'),
         title: z.string(),
         instructions: z.string().describe('instrucciones claras y completas para el trabajador'),
       }),
@@ -135,7 +135,7 @@ function makeTools(ctx: { taskId: TaskId; actor: CharacterKey; isLeader: boolean
         })) as TaskId;
         const result = await runAgent(worker as CharacterKey, subtaskId, `${title}\n\n${instructions}`, false);
         await cx.setResult(subtaskId, result);
-        return `Resultado de ${roster[worker as CharacterKey].name}:\n${result}`;
+        return `Resultado de ${getRoster()[worker as CharacterKey]?.name ?? worker}:\n${result}`;
       },
     });
   }
@@ -159,9 +159,10 @@ async function runAgent(
   isLeader: boolean,
 ): Promise<string> {
   const tools = makeTools({ taskId, actor, isLeader });
-  const brain = getModel(roster[actor].brain);
+  const perfil = getRoster()[actor];
+  const brain = getModel(perfil?.brain);
   const system =
-    roster[actor].systemPrompt +
+    (perfil?.systemPrompt ?? `Eres ${actor}.`) +
     `\n\nResponde SIEMPRE en español, de forma concisa. Al terminar, entrega un resultado claro y accionable.`;
 
   await emit(taskId, actor, 'status', `${isLeader ? 'analizando y planificando' : 'trabajando'} · cerebro: ${brain.label}`);
@@ -190,8 +191,9 @@ async function runAgent(
 async function runLeader(task: any) {
   const taskId = task._id as TaskId;
   await cx.updateStatus(taskId, 'in_progress');
-  const workerLines = (workerKeys as readonly CharacterKey[])
-    .map((k) => `- ${k} (${roster[k].name}): ${roster[k].role}`)
+  const rst = getRoster();
+  const workerLines = getWorkerKeys()
+    .map((k) => `- ${k} (${rst[k].name}): ${rst[k].role}`)
     .join('\n');
   const prompt =
     `Nueva tarea del usuario: "${task.title}".\n\nDetalle: ${task.description}\n\n` +
