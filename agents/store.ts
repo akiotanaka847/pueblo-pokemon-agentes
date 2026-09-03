@@ -57,6 +57,8 @@ export interface CustomAgent {
   name: string;         // nombre visible
   role: string;         // especialidad corta (para que el líder sepa a quién delegar)
   personality: string;  // cómo habla y actúa (se usa en su prompt)
+  instructions?: string;// manual de tareas en Markdown (su .md)
+  files?: string[];     // archivos de contexto adjuntos (nombres)
   sprite: string;       // qué sprite usa en el pueblo
   brain?: string;       // cerebro propio (opcional)
   createdAt: number;
@@ -262,17 +264,22 @@ export const cx = {
   setSetting(k: string, v: string) { (db.settings ||= {})[k] = v; persist(); },
 
   // ── agentes personalizados (los que crea el usuario) ──
-  createAgent(a: { name: string; role: string; personality: string; sprite: string; brain?: string }): CustomAgent {
+  createAgent(a: { name: string; role: string; personality: string; sprite: string; brain?: string; instructions?: string }): CustomAgent {
     const base = a.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
       .replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'agente';
     let key = base, n = 2;
     const usados = new Set(db.customAgents.map((x) => x.key));
     while (usados.has(key)) key = `${base}-${n++}`;
     const ag: CustomAgent = { key, name: a.name, role: a.role, personality: a.personality,
-      sprite: a.sprite, brain: a.brain, createdAt: now() };
+      instructions: a.instructions || '', files: [], sprite: a.sprite, brain: a.brain, createdAt: now() };
     db.customAgents.push(ag); persist(); return ag;
   },
   listCustomAgents(): CustomAgent[] { return db.customAgents.slice().sort((a, b) => a.createdAt - b.createdAt); },
+  addAgentFile(key: string, filename: string) {
+    const ag = db.customAgents.find((x) => x.key === key); if (!ag) return;
+    ag.files = [...(ag.files || []).filter((f) => f !== filename), filename];
+    persist();
+  },
   deleteAgent(key: string) { db.customAgents = db.customAgents.filter((x) => x.key !== key); persist(); },
 
   // ── consultas para la UI ──

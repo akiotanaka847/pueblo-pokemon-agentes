@@ -65,18 +65,21 @@ export function startServer() {
   // Estado de cada agente (para la vista animada del pueblo/oficina).
   app.get('/api/agents', (_req, res) => {
     const rst = getRoster();
+    const propios = Object.fromEntries(cx.listCustomAgents().map((a) => [a.key, a]));
     const states = cx.agentStates(Object.keys(rst));
     res.json(states.map((s) => {
       const r = rst[s.key];
       return { ...s, name: r?.name ?? s.key, role: r?.role ?? '', bio: r?.bio ?? '', sprite: r?.sprite ?? s.key,
-               isLeader: s.key === 'oak', custom: !!r?.custom };
+               isLeader: s.key === 'oak', custom: !!r?.custom,
+               hasInstructions: !!propios[s.key]?.instructions,
+               files: propios[s.key]?.files || [] };
     }));
   });
 
   // ── Agentes personalizados: crear los tuyos y sumarlos al equipo ──
   app.get('/api/roster', (_req, res) => res.json(cx.listCustomAgents()));
   app.post('/api/roster', (req, res) => {
-    const { name, role, personality, sprite, brain } = req.body || {};
+    const { name, role, personality, sprite, brain, instructions } = req.body || {};
     if (!name || !String(name).trim()) return res.status(400).json({ error: 'name requerido' });
     res.json(cx.createAgent({
       name: String(name).trim(),
@@ -84,9 +87,25 @@ export function startServer() {
       personality: String(personality || 'Eres servicial y directo.').trim(),
       sprite: String(sprite || 'tu-entrenador'),
       brain: brain || undefined,
+      instructions: String(instructions || ''),
     }));
   });
   app.delete('/api/roster/:key', (req, res) => { cx.deleteAgent(req.params.key); res.json({ ok: true }); });
+
+  // Adjuntar un archivo de contexto a un agente (llega en base64 desde el tablero).
+  app.post('/api/roster/:key/files', (req, res) => {
+    const key = String(req.params.key).replace(/[^a-z0-9-]/gi, '');
+    const { filename, contentBase64 } = req.body || {};
+    if (!key || !filename || !contentBase64) return res.status(400).json({ error: 'faltan datos' });
+    const safe = path.basename(String(filename)).replace(/[^\w.\- ]/g, '_');
+    const buf = Buffer.from(String(contentBase64), 'base64');
+    if (buf.length > 2 * 1024 * 1024) return res.status(413).json({ error: 'máximo 2 MB por archivo' });
+    const dir = path.join(__dirname, 'data', key);
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, safe), buf);
+    cx.addAgentFile(key, safe);
+    res.json({ ok: true, filename: safe, bytes: buf.length });
+  });
 
   // Sprites disponibles para elegir el aspecto de un agente nuevo.
   app.get('/api/sprites', (_req, res) => {

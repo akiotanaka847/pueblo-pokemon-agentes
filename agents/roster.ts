@@ -100,8 +100,14 @@ export function getRoster(): Record<string, Role> {
     out[a.key] = {
       name: a.name,
       role: a.role,
-      systemPrompt: `Eres ${a.name}, parte del equipo del Pueblo Pokémon. ${a.personality}\n` +
-        `Tu especialidad es: ${a.role}. ${SHARED}`,
+      systemPrompt:
+        `Eres ${a.name}, parte del equipo del Pueblo Pokémon. ${a.personality}\n` +
+        `Tu especialidad es: ${a.role}. ${SHARED}` +
+        (a.instructions ? `\n\n=== TU MANUAL DE TAREAS ===\n${a.instructions}\n=== FIN DEL MANUAL ===` : '') +
+        ((a.files && a.files.length)
+          ? `\n\nTIENES ARCHIVOS DE CONTEXTO. Léelos con read_data cuando los necesites: ` +
+            a.files.map((f) => `${a.key}/${f}`).join(', ')
+          : ''),
       bio: a.personality,
       brain: a.brain as BrainId | undefined,
       sprite: a.sprite,

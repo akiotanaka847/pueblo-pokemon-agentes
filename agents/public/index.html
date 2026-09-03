@@ -252,6 +252,11 @@
             <input id="aName" placeholder="Nombre (ej: Gary)" />
             <input id="aRole" placeholder="Especialidad (ej: Análisis de la competencia)" />
             <textarea id="aPers" placeholder="Personalidad: cómo habla, cómo actúa, sus manías…"></textarea>
+            <div class="muted" style="margin-bottom:4px">📄 Manual de tareas (Markdown) — qué debe hacer, sus reglas y prioridades:</div>
+            <textarea id="aInstr" style="min-height:110px;font-family:ui-monospace,Menlo,monospace;font-size:12px"
+              placeholder="## Tareas principales&#10;- Revisar X cada mañana&#10;- Preparar informe semanal&#10;&#10;## Reglas&#10;- Cita siempre las fuentes"></textarea>
+            <div class="muted" style="margin-bottom:4px">📎 Archivos de contexto (se adjuntan tras crearlo):</div>
+            <input type="file" id="aFiles" multiple style="padding:6px;font-size:12px" />
             <div class="muted" style="margin-bottom:6px">Elige su aspecto:</div>
             <div class="spick" id="aSprites"></div>
             <button class="small" id="aCreate">Añadir al equipo</button>
@@ -439,12 +444,27 @@ function renderSpritePicker(){
       style:"background-image:url('/sprites/"+sp+".png')",
       onclick:()=>{ spriteSel = sp; renderSpritePicker(); } })));
 }
+const leerBase64 = (file) => new Promise((res, rej) => {
+  const fr = new FileReader();
+  fr.onload = () => res(String(fr.result).split(',')[1]);
+  fr.onerror = rej;
+  fr.readAsDataURL(file);
+});
 async function createAgent(){
   const name = $('aName').value.trim(); if(!name) return;
-  await postJSON('/api/roster', { name, role:$('aRole').value.trim(),
-    personality:$('aPers').value.trim(), sprite:spriteSel });
-  $('aName').value=''; $('aRole').value=''; $('aPers').value='';
-  await refresh();
+  const btn = $('aCreate'); btn.disabled = true; btn.textContent = 'Creando…';
+  try {
+    const ag = await postJSON('/api/roster', { name, role:$('aRole').value.trim(),
+      personality:$('aPers').value.trim(), sprite:spriteSel, instructions:$('aInstr').value });
+    // adjuntar los archivos de contexto elegidos
+    const files = Array.from($('aFiles').files || []);
+    for (const f of files) {
+      btn.textContent = 'Subiendo ' + f.name + '…';
+      await postJSON('/api/roster/'+ag.key+'/files', { filename:f.name, contentBase64: await leerBase64(f) });
+    }
+    $('aName').value=''; $('aRole').value=''; $('aPers').value=''; $('aInstr').value=''; $('aFiles').value='';
+    await refresh();
+  } finally { btn.disabled = false; btn.textContent = 'Añadir al equipo'; }
 }
 async function deleteAgent(key){
   await fetch('/api/roster/'+key, { method:'DELETE' });
@@ -574,6 +594,8 @@ function renderProfile(){
         h('span',{class:'badge '+(busy?'b-in_progress':'b-pending')}, estado)),
       h('div',{class:'muted',style:'margin-top:3px'}, a.role || ''),
       a.bio ? h('p',{class:'bio'}, a.bio) : null,
+      a.hasInstructions ? h('div',{class:'muted',style:'margin-top:6px'}, '📄 Tiene manual de tareas propio') : null,
+      (a.files && a.files.length) ? h('div',{class:'muted',style:'margin-top:4px'}, '📎 Archivos: '+a.files.join(', ')) : null,
       a.task ? h('div',{class:'now'}, h('b',{},'Ahora mismo: '), a.task) : null,
       (a.lastEvent && a.lastEvent.content) ? h('div',{class:'muted',style:'margin-top:6px'}, '💬 '+a.lastEvent.content) : null,
       visiting ? h('div',{class:'muted',style:'margin-top:6px'}, 'De la aldea '+visiting.name) : null),

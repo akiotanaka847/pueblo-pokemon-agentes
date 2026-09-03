@@ -73,12 +73,15 @@ function makeTools(ctx: { taskId: TaskId; actor: CharacterKey; isLeader: boolean
       description: 'Lee un archivo de la carpeta de datos que el usuario suministra (agents/data).',
       inputSchema: z.object({ filename: z.string() }),
       execute: async ({ filename }) => {
-        const safe = path.basename(filename);
-        const p = path.join(DATA_DIR, safe);
-        await emit(ctx.taskId, ctx.actor, 'tool_call', `read_data: ${safe}`);
-        if (!fs.existsSync(p)) {
-          const avail = fs.readdirSync(DATA_DIR).join(', ') || '(ninguno)';
-          return `No existe ${safe}. Archivos disponibles: ${avail}`;
+        // Admite subcarpetas (p. ej. "gary/notas.md") pero nunca salir de data/
+        const rel = String(filename).replace(/^[/\\]+/, '');
+        const p = path.resolve(DATA_DIR, rel);
+        await emit(ctx.taskId, ctx.actor, 'tool_call', `read_data: ${rel}`);
+        if (!p.startsWith(path.resolve(DATA_DIR))) return 'Ruta no permitida.';
+        if (!fs.existsSync(p) || fs.statSync(p).isDirectory()) {
+          const listar = (d, pre = '') => fs.readdirSync(d, { withFileTypes: true })
+            .flatMap((e) => e.isDirectory() ? listar(path.join(d, e.name), pre + e.name + '/') : [pre + e.name]);
+          return `No existe ${rel}. Archivos disponibles: ${listar(DATA_DIR).join(', ') || '(ninguno)'}`;
         }
         return fs.readFileSync(p, 'utf8').slice(0, 8000);
       },
