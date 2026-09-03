@@ -2,7 +2,7 @@
 //  Generador de sprites originales estilo Pokémon para AI Town
 //  Sin dependencias externas: codifica PNG con el módulo `zlib`.
 //
-//  Produce, por personaje, una hoja 96x128 (frames de 32x32):
+//  Produce, por personaje, una hoja 144x192 (frames de 48x48):
 //    fila 0 = abajo, fila 1 = izquierda, fila 2 = derecha, fila 3 = arriba
 //    columnas 0/1/2 = ciclo de pasos (caminar)
 //
@@ -88,7 +88,7 @@ class Canvas {
 function brush(canvas, cellX, cellY, mirror = false) {
   return {
     px(lx, ly, color) {
-      const x = mirror ? 31 - lx : lx;
+      const x = mirror ? SIZE - 1 - lx : lx;
       canvas.set(cellX + x, cellY + ly, color);
     },
     rect(x0, y0, x1, y1, color) {
@@ -98,221 +98,181 @@ function brush(canvas, cellX, cellY, mirror = false) {
 }
 
 // ── Colores base ──────────────────────────────────────────────
-const SKIN = [244, 205, 150];
-const SKIN_TAN = [196, 138, 92];
-const SHADOW = [0, 0, 0, 70];
-const BLACK = [40, 34, 38];
-const WHITE = [246, 246, 240];
-const shade = ([r, g, b], f = 0.78) => [Math.round(r * f), Math.round(g * f), Math.round(b * f)];
+const SIZE = 48;                       // lado del fotograma (antes 32)
+const SKIN = [246, 208, 158];
+const SKIN_TAN = [198, 140, 96];
+const OUT = [26, 22, 30];
+const WHITE = [248, 248, 242];
+const shade = ([r, g, b], f = 0.75) => [(r * f) | 0, (g * f) | 0, (b * f) | 0];
+const light = ([r, g, b], f = 1.15) => [Math.min(255, r * f) | 0, Math.min(255, g * f) | 0, Math.min(255, b * f) | 0];
 
-// ── Dibujo de un ENTRENADOR (humanoide chibi) ─────────────────
+// ── ENTRENADOR (chibi de ~2,5 cabezas, pies abajo) ────────────
 function drawTrainer(b, dir, frame, P) {
-  const skin = P.skin || SKIN;
-  const legY = [0, -1, 0, 1][frame + 1] ?? 0; // bob de piernas
-  // sombra
-  b.rect(11, 29, 20, 30, SHADOW);
+  const skin = P.skin || SKIN, skinSh = shade(skin, 0.85);
+  const shirt = P.shirt, shirtSh = shade(shirt, 0.78), shirtLt = light(shirt);
+  const pants = P.pants, pantsSh = shade(pants, 0.72);
+  const shoes = P.shoes || [58, 52, 60];
+  const paso = frame === 0 ? 1 : frame === 2 ? -1 : 0;
 
-  // piernas (pantalón) con paso alterno
-  const pants = P.pants, sh = shade(pants, 0.7);
+  // ── piernas y zapatos ──
   if (dir === 'down' || dir === 'up') {
-    const lLow = frame === 0 ? 1 : 0, rLow = frame === 2 ? 1 : 0;
-    b.rect(12, 24, 15, 28 + lLow, pants);
-    b.rect(16, 24, 19, 28 + rLow, pants);
-    b.rect(12, 28 + lLow, 15, 28 + lLow, sh); // zapatos
-    b.rect(16, 28 + rLow, 19, 28 + rLow, sh);
+    const li = paso > 0 ? 1 : 0, re = paso < 0 ? 1 : 0;
+    b.rect(18, 37, 22, 44 + li, pants);  b.rect(25, 37, 29, 44 + re, pants);
+    b.rect(21, 37, 22, 44 + li, pantsSh); b.rect(28, 37, 29, 44 + re, pantsSh);
+    b.rect(17, 45 + li, 22, 46 + li, shoes);
+    b.rect(25, 45 + re, 30, 46 + re, shoes);
   } else {
-    // perfil: pierna delantera y trasera con zancada
-    const stride = frame === 0 ? 2 : frame === 2 ? -2 : 0;
-    b.rect(13, 24, 16, 28, shade(pants, 0.65)); // trasera
-    b.rect(15 + stride, 24, 18 + stride, 28, pants); // delantera
-    b.rect(15 + stride, 28, 18 + stride, 28, sh);
+    const z = frame === 0 ? 3 : frame === 2 ? -3 : 0;
+    b.rect(20, 37, 25, 44, pantsSh);
+    b.rect(21 + z, 37, 26 + z, 44, pants);
+    b.rect(19, 45, 25, 46, shade(shoes, 0.8));
+    b.rect(20 + z, 45, 27 + z, 46, shoes);
   }
 
-  // torso (camisa)
-  const shirt = P.shirt, shShade = shade(shirt);
-  b.rect(11, 16 + legY, 20, 24 + legY, shirt);
-  b.rect(19, 16 + legY, 20, 24 + legY, shShade); // sombreado lado derecho
-  if (P.belt) b.rect(11, 24 + legY, 20, 24 + legY, P.belt);
+  // ── torso ──
+  b.rect(15, 25, 32, 38, shirt);
+  b.rect(30, 25, 32, 38, shirtSh);          // sombra lateral
+  b.rect(15, 25, 32, 26, shirtLt);          // hombros iluminados
+  if (P.belt) b.rect(15, 36, 32, 37, P.belt);
+  if (P.emblem && dir !== 'up') {           // emblema (Team Rocket)
+    b.rect(21, 28, 26, 34, P.emblem);
+    b.rect(22, 29, 23, 33, shirt); b.px(24, 31, shirt); b.px(25, 32, shirt);
+  }
 
-  // brazos (mangas) balanceo opuesto a piernas
-  const armSwing = frame === 0 ? 1 : frame === 2 ? -1 : 0;
+  // ── brazos ──
+  const sw = frame === 0 ? 1 : frame === 2 ? -1 : 0;
   const sleeve = P.sleeve || shirt;
-  b.rect(9, 17 + legY + armSwing, 10, 22 + legY + armSwing, sleeve);
-  b.rect(21, 17 + legY - armSwing, 22, 22 + legY - armSwing, sleeve);
-  b.px(9, 22 + legY + armSwing, skin); b.px(10, 22 + legY + armSwing, skin); // manos
-  b.px(21, 22 + legY - armSwing, skin); b.px(22, 22 + legY - armSwing, skin);
+  b.rect(11, 26 + sw, 14, 35 + sw, sleeve);
+  b.rect(33, 26 - sw, 36, 35 - sw, sleeve);
+  b.rect(11, 34 + sw, 14, 36 + sw, skin);   // manos
+  b.rect(33, 34 - sw, 36, 36 - sw, skin);
 
-  // emblema (Team Rocket "R")
-  if (P.emblem && dir !== 'up') {
-    b.rect(14, 18 + legY, 17, 21 + legY, P.emblem);
-    b.px(15, 19 + legY, shirt); b.px(16, 20 + legY, shirt);
-  }
-
-  // cabeza (chibi grande)
+  // ── cabeza ──
   if (dir === 'up') {
-    // nuca: pelo cubre casi todo
-    b.rect(10, 6, 21, 16, P.hair);
+    b.rect(13, 8, 34, 25, P.hair);
+    b.rect(31, 9, 34, 24, shade(P.hair, 0.8));
   } else {
-    b.rect(10, 6, 21, 16, skin);
-    b.rect(20, 7, 21, 15, shade(skin, 0.88)); // sombra mejilla
+    b.rect(13, 8, 34, 25, skin);
+    b.rect(31, 10, 34, 24, skinSh);         // sombra de la mejilla
+    b.rect(13, 24, 34, 25, skinSh);         // barbilla
   }
 
-  // ── pelo / gorra por estilo ──
   drawHair(b, dir, P);
 
-  // ── ojos / cara ──
+  // ── cara ──
   if (dir !== 'up') {
-    if (P.squint) {
-      b.rect(12, 12, 14, 12, BLACK);
-      b.rect(17, 12, 19, 12, BLACK);
-    } else if (dir === 'down') {
-      b.rect(13, 11, 13, 12, BLACK);
-      b.rect(18, 11, 18, 12, BLACK);
-    } else {
-      // perfil: un ojo hacia el frente (derecha por defecto; el espejo lo pasa a izquierda)
-      b.rect(18, 11, 19, 12, BLACK);
-      b.px(21, 13, shade(skin, 0.85)); // nariz
-    }
-    if (P.blush) { b.px(11, 13, [230, 120, 120]); b.px(20, 13, [230, 120, 120]); }
+    const ojo = (x) => {
+      b.rect(x, 16, x + 3, 20, WHITE);      // esclerótica
+      b.rect(x + 1, 17, x + 2, 20, OUT);    // pupila
+      b.px(x + 1, 17, [120, 150, 200]);     // brillo
+    };
+    if (P.squint) { b.rect(17, 18, 21, 19, OUT); b.rect(27, 18, 31, 19, OUT); }
+    else if (dir === 'down') { ojo(17); ojo(27); }
+    else { ojo(26); b.px(34, 20, skinSh); } // de perfil: un ojo y la nariz
+    b.rect(22, 22, 25, 22, shade(skin, 0.7));  // boca
+    if (P.blush) { b.rect(15, 20, 17, 21, [235, 140, 140]); b.rect(31, 20, 33, 21, [235, 140, 140]); }
   }
 }
 
 function drawHair(b, dir, P) {
-  const hair = P.hair, hs = shade(hair, 0.7);
-  const style = P.hairStyle || 'short';
+  const hair = P.hair, hs = shade(hair, 0.72), hl = light(hair, 1.2);
+  const estilo = P.hairStyle || 'short';
 
-  if (style === 'cap') {
-    // gorra tipo Ash
-    b.rect(9, 4, 22, 8, P.hat);
-    b.rect(9, 8, 22, 8, shade(P.hat, 0.7)); // borde
-    if (dir === 'down') {
-      b.rect(12, 6, 19, 8, WHITE); // parche frontal blanco
-      b.rect(9, 9, 15, 9, shade(P.hat, 0.6)); // visera
-    } else if (dir !== 'up') {
-      b.rect(9, 9, 13, 9, shade(P.hat, 0.6)); // visera de perfil
-    }
-    // patillas
-    b.px(10, 9, hair); b.px(21, 9, hair);
+  if (estilo === 'cap') {                    // gorra tipo Ash
+    b.rect(12, 5, 35, 13, P.hat);
+    b.rect(12, 5, 35, 6, light(P.hat, 1.15));
+    b.rect(12, 12, 35, 13, shade(P.hat, 0.7));
+    if (dir === 'down') { b.rect(18, 8, 29, 12, WHITE); b.rect(12, 14, 24, 15, shade(P.hat, 0.6)); }
+    else if (dir !== 'up') b.rect(12, 14, 21, 15, shade(P.hat, 0.6));
+    b.rect(13, 13, 15, 17, hair); b.rect(32, 13, 34, 17, hair);   // patillas
     return;
   }
 
-  // pelo base sobre la cabeza
-  b.rect(9, 3, 22, 7, hair);
-  b.rect(9, 7, 10, 11, hair); // lado izq
-  b.rect(21, 7, 22, 11, hair); // lado der
-  b.rect(9, 3, 22, 3, hs);
+  b.rect(12, 4, 35, 12, hair);
+  b.rect(12, 4, 35, 5, hl);
+  b.rect(12, 11, 35, 12, hs);
+  b.rect(12, 10, 14, 20, hair); b.rect(33, 10, 35, 20, hair);     // laterales
 
-  if (style === 'spiky') {
-    b.px(11, 2, hair); b.px(14, 2, hair); b.px(17, 2, hair); b.px(20, 2, hair);
+  if (estilo === 'spiky') for (const x of [15, 20, 25, 30]) { b.rect(x, 2, x + 2, 4, hair); b.px(x + 1, 1, hs); }
+  if (estilo === 'ponytail') {
+    if (dir === 'up' || dir === 'down') { b.rect(34, 6, 38, 22, hair); b.rect(37, 8, 38, 20, hs); }
+    else b.rect(6, 8, 11, 24, hair);
   }
-  if (style === 'ponytail') {
-    // coleta lateral (Misty)
-    if (dir === 'up' || dir === 'down') { b.rect(21, 4, 23, 12, hair); b.px(23, 8, hs); }
-    else { b.rect(6, 5, 8, 13, hair); }
+  if (estilo === 'long') {
+    const largo = P.hairLen || 30;
+    b.rect(10, 8, 13, largo, hair); b.rect(34, 8, 37, largo, hair);
+    b.rect(11, 8, 11, largo, hs);
+    if (dir === 'up') b.rect(13, 8, 34, largo, hair);
+    if (P.hairUp) { b.rect(18, 0, 29, 5, hair); b.rect(18, 0, 29, 1, hl); }
   }
-  if (style === 'long') {
-    // melena larga que cae (Jessie / James)
-    const len = P.hairLen || 16;
-    b.rect(8, 6, 9, len, hair);
-    b.rect(22, 6, 23, len, hair);
-    if (dir === 'up') b.rect(10, 6, 21, len, hair);
-    if (style === 'long' && P.hairUp) { // copete alto de Jessie
-      b.rect(13, 0, 18, 3, hair);
-    }
-  }
-  if (style === 'lab' && dir !== 'up') {
-    // canas + entradas del Prof. Oak
-    b.rect(9, 3, 22, 5, hair);
-  }
+  if (estilo === 'lab') { b.rect(12, 4, 35, 8, hair); b.rect(12, 4, 35, 5, WHITE); }
 }
 
-// ── Dibujo de PIKACHU ─────────────────────────────────────────
+// ── PIKACHU ───────────────────────────────────────────────────
 function drawPikachu(b, dir, frame) {
-  const Y = [250, 214, 40], YS = [214, 170, 20], RED = [222, 70, 60], BR = [140, 90, 30];
-  const legY = frame === 1 ? 0 : 1;
-  b.rect(11, 29, 20, 30, SHADOW);
+  const Y = [252, 218, 60], YS = [212, 172, 30], YL = [255, 240, 140];
+  const RED = [226, 74, 62], BR = [150, 100, 36];
+  const salto = frame === 1 ? 0 : 1;
 
-  // cola de rayo (detrás, a un lado)
-  if (dir !== 'up') { b.rect(22, 16, 24, 20, BR); b.px(24, 15, Y); b.px(25, 13, Y); b.px(23, 11, Y); b.px(24, 10, Y); }
-  else { b.rect(20, 6, 22, 18, Y); }
+  if (dir !== 'up') { b.rect(33, 24, 37, 30, BR); b.rect(36, 20, 40, 24, Y); b.rect(38, 14, 42, 20, Y); b.rect(35, 12, 40, 16, Y); }
+  else { b.rect(30, 8, 35, 28, Y); }
 
-  // orejas largas con punta negra
-  b.rect(10, 2, 12, 9, Y); b.px(10, 2, BLACK); b.px(11, 2, BLACK); b.rect(10, 2, 12, 3, BLACK);
-  b.rect(19, 2, 21, 9, Y); b.rect(19, 2, 21, 3, BLACK);
+  b.rect(13, 2, 18, 14, Y); b.rect(13, 2, 18, 5, OUT);          // orejas
+  b.rect(29, 2, 34, 14, Y); b.rect(29, 2, 34, 5, OUT);
 
-  // cuerpo/cabeza amarilla (redondeada)
-  b.rect(10, 9, 21, 27 - legY, Y);
-  b.rect(9, 12, 9, 24, Y); b.rect(22, 12, 22, 24, Y);
-  b.rect(20, 10, 21, 26 - legY, YS); // sombreado
-  // corner rounding
-  b.px(10, 9, [0, 0, 0, 0]); b.px(21, 9, [0, 0, 0, 0]);
+  b.rect(12, 13, 35, 41 - salto, Y);                             // cuerpo
+  b.rect(10, 18, 12, 36, Y); b.rect(35, 18, 37, 36, Y);
+  b.rect(31, 15, 35, 40 - salto, YS);                            // sombreado
+  b.rect(13, 14, 30, 15, YL);                                    // brillo
 
-  // rayas marrones de la espalda (vista de arriba)
-  if (dir === 'up') { b.rect(10, 12, 21, 13, BR); b.rect(10, 16, 21, 17, BR); }
+  if (dir === 'up') { b.rect(12, 19, 35, 21, BR); b.rect(12, 25, 35, 27, BR); }
 
-  // pies
-  b.rect(11, 27 - legY, 14, 28, YS);
-  b.rect(17, 27 - legY, 20, 28, YS);
+  b.rect(14, 41 - salto, 20, 44, YS); b.rect(27, 41 - salto, 33, 44, YS);  // pies
 
   if (dir !== 'up') {
-    // mejillas rojas
-    b.rect(10, 17, 12, 19, RED);
-    b.rect(19, 17, 21, 19, RED);
-    // ojos
+    b.rect(11, 26, 16, 31, RED); b.rect(31, 26, 36, 31, RED);     // mejillas
     if (dir === 'down') {
-      b.rect(13, 13, 14, 15, BLACK); b.px(13, 13, WHITE);
-      b.rect(17, 13, 18, 15, BLACK); b.px(17, 13, WHITE);
-      b.px(15, 16, BLACK); b.px(16, 16, BLACK); // nariz/boca
+      b.rect(17, 19, 20, 24, OUT); b.px(18, 20, WHITE);
+      b.rect(27, 19, 30, 24, OUT); b.px(28, 20, WHITE);
+      b.rect(22, 26, 25, 27, OUT);
     } else {
-      b.rect(17, 13, 18, 15, BLACK); b.px(17, 13, WHITE);
-      b.px(20, 16, BLACK);
+      b.rect(27, 19, 30, 24, OUT); b.px(28, 20, WHITE);
+      b.rect(32, 25, 34, 26, OUT);
     }
   }
 }
 
-// ── Dibujo de MEOWTH ──────────────────────────────────────────
+// ── MEOWTH ────────────────────────────────────────────────────
 function drawMeowth(b, dir, frame) {
-  const CREAM = [238, 226, 190], CS = [206, 190, 150], BR = [120, 84, 48], GOLD = [240, 196, 60];
-  const legY = frame === 1 ? 0 : 1;
-  b.rect(11, 29, 20, 30, SHADOW);
+  const CR = [242, 232, 200], CS = [206, 192, 152], BR = [124, 88, 50], GOLD = [244, 200, 66], GL = [255, 236, 150];
+  const salto = frame === 1 ? 0 : 1;
 
-  // cola enroscada con punta marrón
-  if (dir !== 'up') { b.rect(21, 20, 24, 22, CREAM); b.px(24, 19, BR); b.px(24, 23, BR); }
+  if (dir !== 'up') { b.rect(33, 30, 39, 33, CR); b.rect(37, 26, 40, 31, CR); b.px(39, 25, BR); }
 
-  // orejas puntiagudas
-  b.px(9, 4, BR); b.rect(9, 5, 11, 8, CREAM); b.px(10, 4, CREAM);
-  b.px(22, 4, BR); b.rect(20, 5, 22, 8, CREAM); b.px(21, 4, CREAM);
+  b.rect(12, 4, 17, 11, CR); b.rect(13, 3, 15, 5, BR);           // orejas
+  b.rect(30, 4, 35, 11, CR); b.rect(32, 3, 34, 5, BR);
 
-  // cuerpo
-  b.rect(11, 15, 20, 27 - legY, CREAM);
-  b.rect(19, 16, 20, 26 - legY, CS);
-  // cabeza
-  b.rect(9, 6, 22, 16, CREAM);
-  b.rect(21, 7, 22, 15, CS);
+  b.rect(15, 22, 32, 41 - salto, CR);                            // cuerpo
+  b.rect(29, 23, 32, 40 - salto, CS);
+  b.rect(12, 8, 35, 24, CR);                                     // cabeza
+  b.rect(32, 10, 35, 23, CS);
 
-  // pies con puntas marrones
-  b.rect(11, 27 - legY, 14, 28, CREAM); b.rect(11, 28, 14, 28, BR);
-  b.rect(17, 27 - legY, 20, 28, CREAM); b.rect(17, 28, 20, 28, BR);
+  b.rect(15, 41 - salto, 21, 44, CR); b.rect(15, 43, 21, 44, BR);  // patas
+  b.rect(26, 41 - salto, 32, 44, CR); b.rect(26, 43, 32, 44, BR);
 
-  if (dir === 'up') {
-    // moneda dorada visible en la nuca también (koban)
-    b.rect(13, 6, 18, 8, GOLD); b.rect(14, 7, 17, 7, [255, 230, 120]);
-    return;
-  }
+  b.rect(19, 7, 28, 12, GOLD); b.rect(20, 8, 27, 10, GL);        // moneda koban
+  if (dir === 'up') return;
 
-  // moneda koban dorada en la frente
-  b.rect(13, 6, 18, 9, GOLD); b.rect(14, 7, 17, 8, [255, 230, 120]);
-
-  // ojos
   if (dir === 'down') {
-    b.rect(12, 11, 13, 12, BLACK); b.rect(18, 11, 19, 12, BLACK);
-    b.px(15, 14, [210, 120, 110]); b.px(16, 14, [210, 120, 110]); // nariz
-    // bigotes
-    b.px(8, 12, BR); b.px(7, 13, BR); b.px(23, 12, BR); b.px(24, 13, BR);
+    b.rect(16, 15, 19, 19, OUT); b.px(17, 16, WHITE);
+    b.rect(28, 15, 31, 19, OUT); b.px(29, 16, WHITE);
+    b.rect(22, 20, 25, 21, [214, 130, 120]);
+    b.rect(8, 17, 11, 17, BR); b.rect(8, 20, 11, 20, BR);        // bigotes
+    b.rect(36, 17, 39, 17, BR); b.rect(36, 20, 39, 20, BR);
   } else {
-    b.rect(18, 11, 19, 12, BLACK);
-    b.px(22, 13, [210, 120, 110]);
-    b.px(24, 12, BR); b.px(25, 13, BR);
+    b.rect(28, 15, 31, 19, OUT); b.px(29, 16, WHITE);
+    b.rect(33, 19, 35, 20, [214, 130, 120]);
+    b.rect(36, 16, 40, 16, BR); b.rect(36, 19, 40, 19, BR);
   }
 }
 
@@ -336,12 +296,12 @@ const CHARS = {
 function outlineCell(canvas, cx, cy, color = [24, 20, 28, 255]) {
   const alphaAt = (x, y) => canvas.buf[((cy + y) * canvas.w + (cx + x)) * 4 + 3];
   const pintar = [];
-  for (let y = 0; y < 32; y++) {
-    for (let x = 0; x < 32; x++) {
+  for (let y = 0; y < SIZE; y++) {
+    for (let x = 0; x < SIZE; x++) {
       if (alphaAt(x, y) > 0) continue;                    // ya tiene color
       for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
         const nx = x + dx, ny = y + dy;
-        if (nx < 0 || ny < 0 || nx > 31 || ny > 31) continue;
+        if (nx < 0 || ny < 0 || nx >= SIZE || ny >= SIZE) continue;
         if (alphaAt(nx, ny) > 0) { pintar.push([x, y]); break; }
       }
     }
@@ -352,11 +312,11 @@ function outlineCell(canvas, cx, cy, color = [24, 20, 28, 255]) {
 const DIRS = ['down', 'left', 'right', 'up'];
 
 function buildSheet(name, P) {
-  const c = new Canvas(96, 128);
+  const c = new Canvas(SIZE * 3, SIZE * 4);
   DIRS.forEach((dir, row) => {
     for (let frame = 0; frame < 3; frame++) {
       const mirror = dir === 'left'; // dibujamos "derecha" y espejamos para izquierda
-      const b = brush(c, frame * 32, row * 32, mirror);
+      const b = brush(c, frame * SIZE, row * SIZE, mirror);
       const drawDir = dir === 'left' ? 'right' : dir;
       if (P.kind === 'pikachu') drawPikachu(b, drawDir, frame);
       else if (P.kind === 'meowth') drawMeowth(b, drawDir, frame);
@@ -364,7 +324,7 @@ function buildSheet(name, P) {
     }
   });
   // contorno en los 12 frames
-  DIRS.forEach((_, row) => { for (let f = 0; f < 3; f++) outlineCell(c, f * 32, row * 32); });
+  DIRS.forEach((_, row) => { for (let f = 0; f < 3; f++) outlineCell(c, f * SIZE, row * SIZE); });
   return c;
 }
 

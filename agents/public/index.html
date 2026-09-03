@@ -105,7 +105,8 @@
   .member.lead { border-color:var(--red); background:#fff6f5; }
   .member.busy { border-color:var(--green-dk); background:#f2faf1; }
   .avatar { width:34px; height:34px; flex:0 0 34px; image-rendering:pixelated; border-radius:8px;
-    background-color:#dceccf; background-repeat:no-repeat; background-position:-31px -1px;
+    background-color:#dceccf; background-repeat:no-repeat;
+    background-size:102px 136px; background-position:-34px -3px;
     border:2px solid var(--line); }
   .member .who { font-weight:700; font-size:13px; }
   .spick { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:8px; }
@@ -122,6 +123,17 @@
   .approval .k { font-size:11px; color:var(--gray); margin-top:5px; font-weight:700; }
   .approval pre { background:#fff; border:1px solid var(--line); border-radius:8px; padding:9px;
     font-size:12px; white-space:pre-wrap; overflow-x:auto; margin:7px 0; max-height:220px; overflow-y:auto; }
+
+  /* ── Perfil de personaje ── */
+  .prof { display:flex; gap:var(--s3); align-items:flex-start; }
+  .bigavatar { width:72px; height:72px; flex:0 0 72px; image-rendering:pixelated; border-radius:12px;
+    background-color:#dceccf; background-repeat:no-repeat; background-size:216px 288px;
+    background-position:-72px -6px; border:3px solid var(--ink); }
+  .prof h3 { margin:0; font-size:17px; }
+  .prof .bio { margin:8px 0 0; font-size:13px; line-height:1.55; color:var(--ink-soft); }
+  .prof .now { margin-top:8px; font-size:13px; background:#f4f2e9; border:2px solid var(--line);
+    border-radius:9px; padding:7px 9px; }
+  #town { cursor:pointer; }
 
   /* ── Modo visita ── */
   .visiting { background:#2b3a55; color:#fff; border-radius:9px; padding:8px 12px; margin-bottom:8px;
@@ -265,6 +277,10 @@
         </div>
         <div class="pkhint" id="dlgHint" hidden>clic en el cuadro para continuar</div>
       </div>
+    </div>
+    <div class="card" id="profileCard" hidden>
+      <h2>🪪 Perfil del personaje</h2>
+      <div class="body" id="profile"></div>
     </div>
     <div class="card">
       <h2>📋 Detalle de la misión</h2>
@@ -483,7 +499,8 @@ function routineEl(r){
 }
 function memberEl(a){
   const busy = a.state!=='idle';
-  return h('div',{class:'member'+(a.isLeader?' lead':'')+(busy?' busy':'')},
+  return h('div',{class:'member'+(a.isLeader?' lead':'')+(busy?' busy':''), style:'cursor:pointer',
+      onclick:()=>selectAgent(a.key)},
     h('div',{class:'avatar', style:"background-image:url('/sprites/"+(a.sprite||a.key)+".png')"}),
     h('div',{style:'min-width:0;flex:1'},
       h('div',{class:'who'}, (CHARS[a.key]?CHARS[a.key].e+' ':(a.custom?'🧩 ':''))+(a.name||a.key), a.isLeader?' · líder':''),
@@ -529,6 +546,7 @@ function render(){
   if(state.approvals.length){ ac.hidden=false; $('approvals').replaceChildren(...state.approvals.map(approvalEl)); }
   else ac.hidden=true;
   $('detail').replaceChildren(detailEl(state.mission));
+  renderProfile();
 }
 function setTab(name){
   for(const b of document.querySelectorAll('.tab')) b.classList.toggle('active', b.dataset.tab===name);
@@ -537,6 +555,31 @@ function setTab(name){
 
 // ─────────── Red de aldeas: directorio y modo visita ───────────
 let visiting = null, myVillageInfo = null, villages = [];
+let selectedAgent = null;
+
+function selectAgent(key){ selectedAgent = key; renderProfile(); }
+function renderProfile(){
+  const card = $('profileCard');
+  const a = agents.find(x => x.key === selectedAgent);
+  if(!a){ card.hidden = true; return; }
+  card.hidden = false;
+  const busy = a.state !== 'idle';
+  const estado = busy ? (a.state==='approval' ? 'esperando permiso' : 'trabajando') : 'libre';
+  $('profile').replaceChildren(h('div',{class:'prof'},
+    h('div',{class:'bigavatar', style:"background-image:url('/sprites/"+(a.sprite||a.key)+".png')"}),
+    h('div',{style:'flex:1;min-width:0'},
+      h('div',{class:'row'},
+        h('h3',{}, (CHARS[a.key]?CHARS[a.key].e+' ':(a.custom?'🧩 ':''))+(a.name||a.key)),
+        a.isLeader ? h('span',{class:'badge b-done'},'líder') : null,
+        h('span',{class:'badge '+(busy?'b-in_progress':'b-pending')}, estado)),
+      h('div',{class:'muted',style:'margin-top:3px'}, a.role || ''),
+      a.bio ? h('p',{class:'bio'}, a.bio) : null,
+      a.task ? h('div',{class:'now'}, h('b',{},'Ahora mismo: '), a.task) : null,
+      (a.lastEvent && a.lastEvent.content) ? h('div',{class:'muted',style:'margin-top:6px'}, '💬 '+a.lastEvent.content) : null,
+      visiting ? h('div',{class:'muted',style:'margin-top:6px'}, 'De la aldea '+visiting.name) : null),
+    h('button',{class:'small reject', title:'Cerrar', onclick:()=>{ selectedAgent=null; renderProfile(); }},'✕')
+  ));
+}
 
 async function loadNetwork(){
   try {
@@ -584,6 +627,7 @@ function stopVisit(){
 
 // ─────────── Vista viva del pueblo: oficina (trabajando) + parque (libres) ───────────
 const TILE=32, COLS=26, ROWS=14, OFFICE_W=13;
+const SPR=48, SPR_DX=-8, SPR_DY=-16;   // fotograma 48x48 anclado por los pies
 const OFF={floor:0,wall:1,desk:2,chair:3,plant:4,rug:5,door:6,cabinet:7};
 const TOWN={grass:0,grass2:1,tallgrass:2,path:3,water:4,flowerR:5,flowerY:6,tree:7};
 const DIRROW={down:0,left:1,right:2,up:3};
@@ -605,6 +649,21 @@ function resizeTown(){
   tctx.imageSmoothingEnabled = false;
 }
 window.addEventListener('resize', () => { resizeTown(); });
+// Clic sobre un personaje del pueblo → abre su perfil
+townCanvas.addEventListener('click', (e) => {
+  const r = townCanvas.getBoundingClientRect();
+  const mx = (e.clientX - r.left) / r.width * W_PX;
+  const my = (e.clientY - r.top) / r.height * H_PX;
+  let elegido = null;
+  for (const a of agents) {
+    const ac = actors[a.key]; if(!ac) continue;
+    if (mx >= ac.x+SPR_DX && mx <= ac.x+SPR_DX+SPR && my >= ac.y+SPR_DY && my <= ac.y+32) {
+      // si se solapan, gana el que se dibuja encima (el de abajo del todo)
+      if (!elegido || ac.y > actors[elegido.key].y) elegido = a;
+    }
+  }
+  if (elegido) selectAgent(elegido.key);
+});
 const loadImg = src => new Promise(r=>{ const i=new Image(); i.onload=()=>r(i); i.onerror=()=>r(null); i.src=src; });
 const randPark = () => ({ x:((OFFICE_W+2)+Math.floor(Math.random()*(COLS-OFFICE_W-3)))*TILE,
                           y:(1+Math.floor(Math.random()*(ROWS-3)))*TILE });
@@ -658,10 +717,11 @@ function drawActor(a,ac){
   tctx.beginPath(); tctx.ellipse(ac.x+16, ac.y+30, 9.5, 3.5, 0, 0, Math.PI*2); tctx.fill(); tctx.restore();
   const img=spriteFor(a);
   const frame = ac.moving ? (Math.floor(ac.t/150)%3) : 1;
-  if(img) tctx.drawImage(img,frame*32,(DIRROW[ac.dir]||0)*32,32,32,Math.round(ac.x),Math.round(ac.y),32,32);
+  if(img) tctx.drawImage(img, frame*SPR, (DIRROW[ac.dir]||0)*SPR, SPR, SPR,
+                        Math.round(ac.x)+SPR_DX, Math.round(ac.y)+SPR_DY, SPR, SPR);
   if(a.state!=='idle' && a.lastEvent && a.lastEvent.content) drawBubble(ac.x+16,ac.y,a.lastEvent.content);
   const icon = a.state==='approval'?'✋' : a.state==='working'?'💻' : '';
-  if(icon){ tctx.font='15px system-ui'; tctx.textAlign='left'; tctx.fillStyle='#2b3a55'; tctx.fillText(icon,ac.x+18,ac.y+6); }
+  if(icon){ tctx.font='15px system-ui'; tctx.textAlign='left'; tctx.fillStyle='#2b3a55'; tctx.fillText(icon,ac.x+26,ac.y-4); }
   tctx.font='9px system-ui'; tctx.textAlign='center';
   tctx.fillStyle = a.state==='idle' ? 'rgba(0,0,0,.5)' : '#1f6f2f';
   tctx.fillRect(ac.x-6,ac.y+32,44,12);

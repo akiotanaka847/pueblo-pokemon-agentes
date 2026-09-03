@@ -68,7 +68,7 @@ export function startServer() {
     const states = cx.agentStates(Object.keys(rst));
     res.json(states.map((s) => {
       const r = rst[s.key];
-      return { ...s, name: r?.name ?? s.key, role: r?.role ?? '', sprite: r?.sprite ?? s.key,
+      return { ...s, name: r?.name ?? s.key, role: r?.role ?? '', bio: r?.bio ?? '', sprite: r?.sprite ?? s.key,
                isLeader: s.key === 'oak', custom: !!r?.custom };
     }));
   });
