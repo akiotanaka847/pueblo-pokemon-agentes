@@ -280,6 +280,15 @@ export const cx = {
     ag.files = [...(ag.files || []).filter((f) => f !== filename), filename];
     persist();
   },
+  updateAgent(key: string, cambios: Partial<Pick<CustomAgent, 'role' | 'personality' | 'instructions'>>) {
+    const ag = db.customAgents.find((x) => x.key === key); if (!ag) return;
+    Object.assign(ag, cambios); persist(); return ag;
+  },
+  removeAgentFile(key: string, filename: string) {
+    const ag = db.customAgents.find((x) => x.key === key); if (!ag) return;
+    ag.files = (ag.files || []).filter((f) => f !== filename); persist();
+  },
+  getAgent(key: string) { return db.customAgents.find((x) => x.key === key); },
   deleteAgent(key: string) { db.customAgents = db.customAgents.filter((x) => x.key !== key); persist(); },
 
   // ── consultas para la UI ──
