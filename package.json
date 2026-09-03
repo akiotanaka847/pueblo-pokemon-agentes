@@ -9,7 +9,8 @@
     "agents": "tsx agents/run.ts",
     "sprites": "node tools/generate-sprites.mjs",
     "map": "node tools/generate-map.mjs",
-    "office": "node tools/generate-office.mjs"
+    "office": "node tools/generate-office.mjs",
+    "hub": "tsx hub/server.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.15",

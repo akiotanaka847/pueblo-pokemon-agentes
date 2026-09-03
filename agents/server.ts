@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { cx, bus } from './store';
 import { getRoster } from './roster';
+import { listVillages, getVillage, myVillage } from './network';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT || 4321);
@@ -94,6 +95,15 @@ export function startServer() {
       res.json(fs.readdirSync(dir).filter((f) => f.endsWith('.png') && !f.includes('tileset'))
         .map((f) => f.replace('.png', '')).sort());
     } catch { res.json([]); }
+  });
+
+  // ── Red de aldeas: quién está en línea y cómo visitarlas ──
+  app.get('/api/network/me', (_req, res) => res.json(myVillage()));
+  app.get('/api/network/villages', async (_req, res) => res.json(await listVillages()));
+  app.get('/api/network/villages/:id', async (req, res) => {
+    const v = await getVillage(req.params.id);
+    if (!v) return res.status(404).json({ error: 'aldea no encontrada o fuera de línea' });
+    res.json(v);
   });
 
   // ── Tablero estático + sprites/tilesets del pueblo ──

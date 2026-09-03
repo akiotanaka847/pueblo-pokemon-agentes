@@ -18,6 +18,9 @@ Todo corre **en tu máquina**. Sin nube obligatoria, sin límites de plan.
 - ✋ **Aprobación humana** — toda acción que envía o modifica algo **se pausa** y te
   pregunta, mostrando exactamente qué va a hacer.
 - 🔁 **Rutinas** — tareas programadas (cada X minutos o a una hora fija).
+- 👥 **Crea tus propios agentes** — nombre, especialidad, personalidad y aspecto; el líder
+  empieza a delegarles al instante.
+- 🌍 **Visita otras aldeas** — mira quién está en línea y entra a ver su equipo.
 - 🧠 **Cerebros intercambiables** — usa el LLM que quieras (incluidos los baratos o
   gratis), global o distinto para cada personaje.
 - 🏢 **Pueblo animado** — vista en vivo con sprites originales, globos de texto y
@@ -62,6 +65,35 @@ clave), **Groq** (rápido y con plan gratis) y **Ollama** (local, **gratis**, si
 
 > 💡 Puedes mezclar: el líder con un modelo potente y los trabajadores con uno barato
 > (`brain: 'custom'` en [`agents/roster.ts`](agents/roster.ts)).
+
+## 🌍 Red de aldeas
+
+Tu pueblo puede conectarse a un **hub** para que otras personas lo visiten (y tú a ellas):
+ves quién está en línea y entras a mirar su equipo en directo.
+
+```
+   Tu aldea ──(cada 15s: "estoy aquí, este es mi equipo")──▶ ┌───────┐
+                                                              │  HUB  │
+   Aldea de un amigo ──────────────────────────────────────▶ │       │
+                                                              └───┬───┘
+   Tú ◀──── "¿quién está en línea?" / "enséñame la aldea X" ──────┘
+```
+
+Las aldeas **publican**, nunca reciben conexiones → funciona detrás de cualquier router,
+sin abrir puertos.
+
+**Privacidad**: solo se comparte el nombre de la aldea, tu apodo y el elenco (nombres,
+roles y si están ocupados). **Nunca** tus tareas, resultados, datos ni claves.
+
+```bash
+npm run hub        # levanta el hub (puerto 4400) — despliégalo donde quieras
+```
+Y en `agents/.env`:
+```bash
+HUB_URL=http://localhost:4400   # o la URL de tu hub desplegado
+VILLAGE_NAME=Pueblo Paleta
+VILLAGE_OWNER=Akio
+```
 
 ## 🏗️ Arquitectura
 

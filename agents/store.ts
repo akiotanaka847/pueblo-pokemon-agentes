@@ -79,6 +79,7 @@ interface DB {
   approvals: Approval[];
   routines: Routine[];
   customAgents: CustomAgent[];
+  settings: Record<string, string>;
 }
 
 const db: DB = load();
@@ -87,11 +88,11 @@ export const bus = new EventEmitter();
 function load(): DB {
   try {
     if (fs.existsSync(DB_FILE))
-      return { tasks: [], events: [], approvals: [], routines: [], customAgents: [], ...JSON.parse(fs.readFileSync(DB_FILE, 'utf8')) };
+      return { tasks: [], events: [], approvals: [], routines: [], customAgents: [], settings: {}, ...JSON.parse(fs.readFileSync(DB_FILE, 'utf8')) };
   } catch (e) {
     console.error('No se pudo leer db.json, empezando vacío:', (e as any).message);
   }
-  return { tasks: [], events: [], approvals: [], routines: [], customAgents: [] };
+  return { tasks: [], events: [], approvals: [], routines: [], customAgents: [], settings: {} };
 }
 
 function computeNext(schedule: Routine['schedule'], from = Date.now()): number {
@@ -255,6 +256,10 @@ export const cx = {
       };
     });
   },
+
+  // ── ajustes persistentes (p. ej. la identidad de tu aldea) ──
+  getSetting(k: string): string | undefined { return db.settings?.[k]; },
+  setSetting(k: string, v: string) { (db.settings ||= {})[k] = v; persist(); },
 
   // ── agentes personalizados (los que crea el usuario) ──
   createAgent(a: { name: string; role: string; personality: string; sprite: string; brain?: string }): CustomAgent {

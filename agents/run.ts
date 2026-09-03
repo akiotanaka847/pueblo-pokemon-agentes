@@ -13,7 +13,9 @@ if (!process.env.ANTHROPIC_API_KEY && !process.env.OPENAI_API_KEY) {
 }
 
 const { startServer } = await import('./server');
+const { startHeartbeat } = await import('./network');
 const { mainLoop } = await import('./orchestrator');
 
 startServer();
+startHeartbeat();
 await mainLoop();

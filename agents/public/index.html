@@ -121,6 +121,16 @@
   .approval pre { background:#fff; border:1px solid var(--line); border-radius:8px; padding:9px;
     font-size:12px; white-space:pre-wrap; overflow-x:auto; margin:7px 0; max-height:220px; overflow-y:auto; }
 
+  /* ── Modo visita ── */
+  .visiting { background:#2b3a55; color:#fff; border-radius:9px; padding:8px 12px; margin-bottom:8px;
+    display:flex; align-items:center; gap:10px; font-size:13px; font-weight:700; }
+  .visiting button { margin-left:auto; }
+  .village { padding:9px 11px; border:2px solid var(--line); border-radius:10px; margin-bottom:7px;
+    background:#fbfaf5; cursor:pointer; }
+  .village:hover { border-color:var(--blue); }
+  .village.mine { border-color:var(--green-dk); background:#f2faf1; }
+  .dot-on { width:8px; height:8px; border-radius:50%; background:var(--green-dk); display:inline-block; }
+
   /* ── Pueblo ── */
   #town { width:100%; image-rendering:pixelated; border:3px solid var(--ink); border-radius:10px;
     background:#8ec98a; display:block; }
@@ -203,6 +213,7 @@
         <button class="tab active" data-tab="missions">🗂️ Misiones</button>
         <button class="tab" data-tab="routines">🔁 Rutinas</button>
         <button class="tab" data-tab="team">👥 Equipo</button>
+        <button class="tab" data-tab="world">🌍 Aldeas</button>
       </div>
       <div class="body" id="pane-missions"><div class="scroll" id="missions"></div></div>
       <div class="body" id="pane-routines" hidden>
@@ -219,6 +230,7 @@
         <button class="small" id="rCreate">➕ Crear rutina</button>
         <div class="scroll" id="routines" style="margin-top:10px"></div>
       </div>
+      <div class="body" id="pane-world" hidden><div id="myVillage" class="muted" style="margin-bottom:8px"></div><div class="scroll" id="villages"></div></div>
       <div class="body" id="pane-team" hidden>
         <details class="newagent">
           <summary>➕ Crear un agente nuevo</summary>
@@ -241,6 +253,7 @@
     <div class="card">
       <h2>🏢 El pueblo en vivo · oficina y parque</h2>
       <div class="body">
+        <div class="visiting" id="visitBanner" hidden></div>
         <canvas id="town" width="832" height="448"></canvas>
         <div class="legend" id="townLegend">Cargando el pueblo…</div>
         <div class="pkbox" id="dialogue" hidden>
@@ -429,6 +442,7 @@ async function refresh(){
   await fetchAgents();
   if(state.selectedId) state.mission = await getJSON('/api/missions/'+state.selectedId);
   checkApprovals(); checkCompletions(); render();
+  loadNetwork();
 }
 
 // ─────────── Render ───────────
@@ -516,7 +530,54 @@ function render(){
 }
 function setTab(name){
   for(const b of document.querySelectorAll('.tab')) b.classList.toggle('active', b.dataset.tab===name);
-  for(const p of ['missions','routines','team']) $('pane-'+p).hidden = (p!==name);
+  for(const p of ['missions','routines','team','world']) $('pane-'+p).hidden = (p!==name);
+}
+
+// ─────────── Red de aldeas: directorio y modo visita ───────────
+let visiting = null, myVillageInfo = null, villages = [];
+
+async function loadNetwork(){
+  try {
+    myVillageInfo = await getJSON('/api/network/me');
+    villages = myVillageInfo.enabled ? await getJSON('/api/network/villages') : [];
+  } catch(e){ villages = []; }
+  renderNetwork();
+}
+function renderNetwork(){
+  const mv = $('myVillage');
+  if(!myVillageInfo || !myVillageInfo.enabled){
+    mv.replaceChildren(h('div',{class:'empty'},
+      'Red desactivada. Define HUB_URL en agents/.env para publicar tu aldea y visitar otras.'));
+    $('villages').replaceChildren();
+    return;
+  }
+  mv.replaceChildren(h('div',{},
+    h('b',{},'Tu aldea: '), myVillageInfo.name, ' · ', h('span',{class:'muted'}, myVillageInfo.owner)));
+  $('villages').replaceChildren(villages.length
+    ? h('div',{}, ...villages.map(villageEl))
+    : h('div',{class:'empty'},'Ninguna aldea en línea todavía.'));
+}
+function villageEl(v){
+  return h('div',{class:'village'+(v.isMine?' mine':''), onclick:()=> v.isMine ? stopVisit() : visitVillage(v.id)},
+    h('div',{class:'t',style:'font-weight:700;font-size:13.5px'}, v.name, v.isMine?' (tuya)':''),
+    h('div',{class:'row',style:'margin-top:5px'},
+      h('span',{class:'dot-on'}), h('span',{class:'muted'}, v.owner),
+      h('span',{class:'muted',style:'margin-left:auto'}, v.agentCount+' agentes · '+v.busy+' ocupados'))
+  );
+}
+async function visitVillage(id){
+  const v = await getJSON('/api/network/villages/'+id).catch(()=>null);
+  if(!v || !v.agents) return;
+  visiting = v; actors = {};                 // reinicia posiciones al cambiar de pueblo
+  agents = v.agents.map(a => ({ ...a, lastEvent:null }));
+  const b = $('visitBanner'); b.hidden = false;
+  b.replaceChildren(h('span',{},'🌍 Estás visitando '), h('b',{}, v.name),
+    h('span',{class:'muted',style:'color:#cfd6e6'},' · de '+v.owner),
+    h('button',{class:'small', onclick:stopVisit},'Volver a mi pueblo'));
+  render();
+}
+function stopVisit(){
+  visiting = null; actors = {}; $('visitBanner').hidden = true; fetchAgents();
 }
 
 // ─────────── Vista viva del pueblo: oficina (trabajando) + parque (libres) ───────────
@@ -615,6 +676,13 @@ function tick(ts){
 }
 async function fetchAgents(){
   try {
+    if(visiting){                            // visitando: refresca el pueblo ajeno
+      const v = await getJSON('/api/network/villages/'+visiting.id).catch(()=>null);
+      if(v && v.agents) agents = v.agents.map(a => ({ ...a, lastEvent:null }));
+      const w = agents.filter(a=>a.state!=='idle').length;
+      $('townLegend').textContent = `🌍 ${visiting.name} · 🏢 ${w} trabajando · 🌳 ${agents.length-w} en el parque`;
+      return;
+    }
     agents = await getJSON('/api/agents');
     const w = agents.filter(a=>a.state!=='idle').length;
     $('townLegend').textContent = `🏢 ${w} trabajando en la oficina · 🌳 ${agents.length-w} en el parque`;

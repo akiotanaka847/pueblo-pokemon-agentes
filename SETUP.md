@@ -121,3 +121,19 @@ npm run office    # tileset de la oficina
 ```
 
 Edita las paletas y formas en `tools/` y vuelve a ejecutarlos.
+
+## 👥 Crear tus propios agentes
+
+Pestaña **👥 Equipo → "➕ Crear un agente nuevo"**: nombre, especialidad, personalidad
+y aspecto (eliges entre los sprites disponibles). Se suma al equipo y el líder empieza
+a delegarle tareas de inmediato. Puedes borrarlos con la papelera.
+
+## 🌍 Visitar otras aldeas
+
+1. Levanta un hub (o usa el de un amigo): `npm run hub`
+2. En `agents/.env` pon `HUB_URL`, `VILLAGE_NAME` y `VILLAGE_OWNER`.
+3. Reinicia con `npm run agents`. En la pestaña **🌍 Aldeas** verás quién está en línea;
+   pulsa una para visitarla y "Volver a mi pueblo" para salir.
+
+Para que te visiten desde fuera de tu red, despliega `hub/server.ts` en un servicio con
+plan gratuito (Fly.io, Render, Railway) y usa esa URL como `HUB_URL`.
