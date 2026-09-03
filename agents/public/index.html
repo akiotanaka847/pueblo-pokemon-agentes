@@ -696,15 +696,15 @@ function stopVisit(){
 // ─────────── Vista viva del pueblo: oficina (trabajando) + parque (libres) ───────────
 const TILE=32, COLS=26, ROWS=14, OFFICE_W=13;
 const SPR=48;                          // lado del fotograma en el PNG
-const SPR_DRAW=60;                     // tamaño en pantalla (un 25% más grandes)
+const SPR_DRAW=48;                     // 1,5 baldosas de alto (proporción RPG clásica)
 const SPR_K=SPR_DRAW/SPR;
 const SPR_DX=16-SPR_DRAW/2;            // centrado horizontal sobre la baldosa
 const SPR_DY=30-46*SPR_K;              // anclado por los pies
-const OFF={floor:0,wall:1,deskL:2,chair:3,plant:4,rug:5,door:6,cabinet:7,deskR:8,
-           boardL:9,boardR:10,coffee:11,shelf:12};
+const OFF={floor:0,wall:1,deskTL:2,chair:3,plant:4,rug:5,door:6,cabinet:7,deskTR:8,
+           boardL:9,boardR:10,coffee:11,shelf:12,deskBL:13,deskBR:14};
 const TOWN={grass:0,grass2:1,tallgrass:2,path:3,water:4,flowerR:5,flowerY:6,tree:7};
 const DIRROW={down:0,left:1,right:2,up:3};
-const DESKS=[[2,3],[5,3],[8,3],[11,3],[2,8],[5,8],[8,8],[11,8]];
+const DESKS=[[1,2],[4,2],[7,2],[10,2],[1,8],[4,8],[7,8],[10,8]];
 const AGENT_KEYS=Object.keys(CHARS).filter(k=>!['user','system'].includes(k));
 let agents=[], actors={}, sprites={}, bg=null, lastTs=0;
 const townCanvas=$('town'), tctx=townCanvas.getContext('2d');
@@ -764,8 +764,12 @@ async function initTown(){
   const b=bg.getContext('2d');
   const T=(ts,i,cx,cy)=>b.drawImage(ts,(i%8)*TILE,Math.floor(i/8)*TILE,TILE,TILE,cx*TILE,cy*TILE,TILE,TILE);
   for(let x=0;x<OFFICE_W;x++) for(let y=0;y<ROWS;y++) T(oTs,OFF.floor,x,y);
-  for(let x=4;x<=8;x++) for(let y=5;y<=6;y++) T(oTs,OFF.rug,x,y);
-  for(const [dx,dy] of DESKS){ T(oTs,OFF.chair,dx,dy); T(oTs,OFF.deskL,dx,dy+1); T(oTs,OFF.deskR,dx+1,dy+1); }
+  for(let x=3;x<=9;x++) for(let y=6;y<=7;y++) T(oTs,OFF.rug,x,y);
+  for(const [dx,dy] of DESKS){
+    T(oTs,OFF.chair,dx,dy);                                    // silla arriba
+    T(oTs,OFF.deskTL,dx,dy+1);   T(oTs,OFF.deskTR,dx+1,dy+1);  // superficie
+    T(oTs,OFF.deskBL,dx,dy+2);   T(oTs,OFF.deskBR,dx+1,dy+2);  // frente y patas
+  }
   T(oTs,OFF.plant,0,0); T(oTs,OFF.plant,12,13); T(oTs,OFF.cabinet,0,12); T(oTs,OFF.cabinet,12,0);
   T(oTs,OFF.boardL,4,0); T(oTs,OFF.boardR,5,0);      // pizarra del equipo
   T(oTs,OFF.coffee,11,12); T(oTs,OFF.plant,10,12);   // rincón de café
