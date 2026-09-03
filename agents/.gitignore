@@ -2,3 +2,6 @@
 mcp.json
 db.json
 output/
+
+# Archivos que adjuntas a tus agentes: son TUYOS, nunca se suben
+data/*/
