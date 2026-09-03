@@ -627,7 +627,11 @@ function stopVisit(){
 
 // ─────────── Vista viva del pueblo: oficina (trabajando) + parque (libres) ───────────
 const TILE=32, COLS=26, ROWS=14, OFFICE_W=13;
-const SPR=48, SPR_DX=-8, SPR_DY=-16;   // fotograma 48x48 anclado por los pies
+const SPR=48;                          // lado del fotograma en el PNG
+const SPR_DRAW=60;                     // tamaño en pantalla (un 25% más grandes)
+const SPR_K=SPR_DRAW/SPR;
+const SPR_DX=16-SPR_DRAW/2;            // centrado horizontal sobre la baldosa
+const SPR_DY=30-46*SPR_K;              // anclado por los pies
 const OFF={floor:0,wall:1,deskL:2,chair:3,plant:4,rug:5,door:6,cabinet:7,deskR:8,
            boardL:9,boardR:10,coffee:11,shelf:12};
 const TOWN={grass:0,grass2:1,tallgrass:2,path:3,water:4,flowerR:5,flowerY:6,tree:7};
@@ -693,7 +697,7 @@ async function initTown(){
   const T=(ts,i,cx,cy)=>b.drawImage(ts,(i%8)*TILE,Math.floor(i/8)*TILE,TILE,TILE,cx*TILE,cy*TILE,TILE,TILE);
   for(let x=0;x<OFFICE_W;x++) for(let y=0;y<ROWS;y++) T(oTs,OFF.floor,x,y);
   for(let x=4;x<=8;x++) for(let y=5;y<=6;y++) T(oTs,OFF.rug,x,y);
-  for(const [dx,dy] of DESKS){ T(oTs,OFF.deskL,dx,dy); T(oTs,OFF.deskR,dx+1,dy); T(oTs,OFF.chair,dx,dy+1); }
+  for(const [dx,dy] of DESKS){ T(oTs,OFF.chair,dx,dy); T(oTs,OFF.deskL,dx,dy+1); T(oTs,OFF.deskR,dx+1,dy+1); }
   T(oTs,OFF.plant,0,0); T(oTs,OFF.plant,12,13); T(oTs,OFF.cabinet,0,12); T(oTs,OFF.cabinet,12,0);
   T(oTs,OFF.boardL,4,0); T(oTs,OFF.boardR,5,0);      // pizarra del equipo
   T(oTs,OFF.coffee,11,12); T(oTs,OFF.plant,10,12);   // rincón de café
@@ -754,9 +758,9 @@ function drawActor(a,ac){
   const sentado = !!ac.sentado;
   const frame = sentado ? 1 : (ac.moving ? (Math.floor(ac.t/150)%3) : 1);
   // sentado: se recorta la mitad inferior, así las piernas quedan tras la silla
-  const alto = sentado ? 34 : SPR;
+  const alto = sentado ? 34 : SPR;     // sentado: se ocultan las piernas tras el escritorio
   if(img) tctx.drawImage(img, frame*SPR, (DIRROW[ac.dir]||0)*SPR, SPR, alto,
-                        Math.round(ac.x)+SPR_DX, Math.round(ac.y)+SPR_DY, SPR, alto);
+                        Math.round(ac.x)+SPR_DX, Math.round(ac.y)+SPR_DY, SPR_DRAW, alto*SPR_K);
   if(a.state!=='idle' && a.lastEvent && a.lastEvent.content) drawBubble(ac.x+16,ac.y,a.lastEvent.content);
   const icon = a.state==='approval'?'✋' : a.state==='working'?'💻' : '';
   if(icon){ tctx.font='15px system-ui'; tctx.textAlign='left'; tctx.fillStyle='#2b3a55'; tctx.fillText(icon,ac.x+26,ac.y-4); }
@@ -786,10 +790,10 @@ function tick(ts){
   for(const a of agents){
     const ac=ensureActor(a.key);
     if(a.state==='working'||a.state==='approval'){
-      const d=DESKS[(ac.desk<0?0:ac.desk)%DESKS.length]; ac.tx=d[0]*TILE; ac.ty=(d[1]+1)*TILE;
+      const d=DESKS[(ac.desk<0?0:ac.desk)%DESKS.length]; ac.tx=d[0]*TILE; ac.ty=d[1]*TILE;
       // ya llegó a su sitio → se sienta mirando al monitor
       ac.sentado = Math.hypot(ac.tx-ac.x, ac.ty-ac.y) < 3;
-      if(ac.sentado) ac.dir='up';
+      if(ac.sentado) ac.dir='down';   // de cara a nosotros y a su escritorio
     } else {
       ac.sentado = false;
       const enOficina = ac.tx < OFFICE_W*TILE;
