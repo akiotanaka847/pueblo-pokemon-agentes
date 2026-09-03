@@ -77,6 +77,14 @@ export function startServer() {
     }));
   });
 
+  // Delegaciones recientes: la vista del pueblo las usa para animar el encuentro
+  app.get('/api/delegations', (req, res) => {
+    // Ojo: 0 es un valor válido, así que no vale usar `||` para el defecto
+    const n = Number(req.query.since);
+    const since = Number.isFinite(n) ? n : Date.now() - 10000;
+    res.json(cx.recentDelegations(since));
+  });
+
   // ── Agentes personalizados: crear los tuyos y sumarlos al equipo ──
   app.get('/api/roster', (_req, res) => res.json(cx.listCustomAgents()));
   app.post('/api/roster', (req, res) => {
