@@ -861,7 +861,17 @@ function tick(ts){
   const escena=[];
   for(const a of agents){
     const ac=ensureActor(a.key);
-    if(a.state==='working'||a.state==='approval'){
+    const enc = ac.encuentro;
+    ac.enReunion = false;
+    if(enc && ts < enc.hasta && actors[enc.con]){
+      const lac = actors[enc.con];                    // se coloca al lado del líder
+      ac.tx = lac.x + 40; ac.ty = lac.y + 6;
+      ac.sentado = false;
+      ac.enReunion = Math.hypot(ac.tx-ac.x, ac.ty-ac.y) < 6;   // ya está a su lado
+    } else if(enc && ts >= enc.hasta){ ac.encuentro = null; }
+
+    if(ac.encuentro && ts < ac.encuentro.hasta){ /* en camino al líder */ }
+    else if(a.state==='working'||a.state==='approval'){
       const d=DESKS[(ac.desk<0?0:ac.desk)%DESKS.length]; ac.tx=d[0]*TILE; ac.ty=d[1]*TILE;
       // ya llegó a su sitio → se sienta mirando al monitor
       ac.sentado = Math.hypot(ac.tx-ac.x, ac.ty-ac.y) < 3;
@@ -888,6 +898,19 @@ function tick(ts){
   for(const {a,ac} of escena) drawActor(a,ac);
   requestAnimationFrame(tick);
 }
+let ultimaDelegacion = Date.now();
+// Cuando el líder delega, el trabajador va a buscarle antes de ponerse a la tarea
+async function comprobarDelegaciones(){
+  try {
+    const nuevas = await getJSON('/api/delegations?since='+ultimaDelegacion);
+    for (const d of nuevas) {
+      ultimaDelegacion = Math.max(ultimaDelegacion, d.at);
+      const ac = actors[d.to];
+      if (ac && actors[d.from]) ac.encuentro = { con: d.from, hasta: performance.now() + 4000 };
+    }
+  } catch(e){}
+}
+
 async function fetchAgents(){
   try {
     if(visiting){                            // visitando: refresca el pueblo ajeno
@@ -898,6 +921,7 @@ async function fetchAgents(){
       return;
     }
     agents = await getJSON('/api/agents');
+    await comprobarDelegaciones();
     const w = agents.filter(a=>a.state!=='idle').length;
     $('townLegend').textContent = `🏢 ${w} trabajando · 🌳 ${agents.length-w} en el parque · 👆 haz clic en un personaje para ver su ficha`;
     $('working').textContent = w ? `⚙️ ${w} trabajando` : '☕ equipo libre';

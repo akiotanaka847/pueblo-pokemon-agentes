@@ -291,6 +291,14 @@ export const cx = {
   getAgent(key: string) { return db.customAgents.find((x) => x.key === key); },
   deleteAgent(key: string) { db.customAgents = db.customAgents.filter((x) => x.key !== key); persist(); },
 
+  // Delegaciones ocurridas después de un instante dado (para animar el pueblo)
+  recentDelegations(sinceMs: number) {
+    return db.events
+      .filter((e) => e.type === 'delegated' && e.createdAt > sinceMs && e.target)
+      .slice(-10)
+      .map((e) => ({ from: e.actor, to: e.target as string, at: e.createdAt, what: e.content }));
+  },
+
   // ── consultas para la UI ──
   listMissions(): Task[] {
     return db.tasks.filter((t) => !t.parentTaskId).sort((a, b) => b.createdAt - a.createdAt);
