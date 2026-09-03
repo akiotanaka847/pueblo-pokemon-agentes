@@ -48,32 +48,43 @@ const tiles = {
     for (let x = 0; x < 32; x++) { p(x, 0, C.wallTop); p(x, 1, C.wallTop); p(x, 31, C.wallTop); }
     for (let x = 2; x < 30; x += 8) for (let y = 4; y < 28; y++) p(x, y, C.wallHi);
   },
-  // Escritorio de DOS baldosas: una persona mide ~1,4 baldosas, así que un
-  // escritorio de una sola quedaba ridículamente pequeño a su lado.
-  deskL(p) {
+  // ── Escritorio de 2x2 baldosas ──
+  // Fila superior: la superficie vista desde arriba. Fila inferior: la CARA
+  // FRONTAL y las patas. Ese frente es lo que le da volumen: sin él, un
+  // escritorio parece un estante plano.
+  deskTL(p) {
     tiles.floor(p);
-    for (let y = 6; y <= 29; y++) for (let x = 3; x <= 31; x++) p(x, y, C.desk);
-    for (let x = 3; x <= 31; x++) { p(x, 6, C.deskHi); p(x, 29, C.deskDark); }
-    for (let y = 6; y <= 29; y++) p(3, y, C.deskDark);          // borde izquierdo
-    // monitor
-    for (let y = 8; y <= 19; y++) for (let x = 10; x <= 27; x++) p(x, y, C.screen);
-    for (let y = 9; y <= 17; y++) for (let x = 11; x <= 26; x++) p(x, y, C.screenOn);
-    for (let x = 16; x <= 21; x++) { p(x, 20, C.screen); p(x, 21, C.screen); }  // pie
-    for (let x = 13; x <= 24; x++) p(x, 22, C.chairDark);       // base
+    for (let y = 7; y <= 31; y++) for (let x = 3; x <= 31; x++) p(x, y, C.desk);
+    for (let x = 3; x <= 31; x++) p(x, 7, C.deskHi);
+    for (let y = 7; y <= 31; y++) p(3, y, C.deskDark);
+    for (let y = 10; y <= 22; y++) for (let x = 11; x <= 28; x++) p(x, y, C.screen);
+    for (let y = 11; y <= 20; y++) for (let x = 12; x <= 27; x++) p(x, y, C.screenOn);
+    for (let x = 17; x <= 22; x++) { p(x, 23, C.screen); p(x, 24, C.screen); }
+    for (let x = 14; x <= 25; x++) p(x, 25, C.chairDark);
   },
-  deskR(p) {
+  deskTR(p) {
     tiles.floor(p);
-    for (let y = 6; y <= 29; y++) for (let x = 0; x <= 28; x++) p(x, y, C.desk);
-    for (let x = 0; x <= 28; x++) { p(x, 6, C.deskHi); p(x, 29, C.deskDark); }
-    for (let y = 6; y <= 29; y++) p(28, y, C.deskDark);         // borde derecho
-    // teclado
-    for (let y = 20; y <= 25; y++) for (let x = 3; x <= 20; x++) p(x, y, C.keys);
-    for (let x = 5; x <= 18; x += 3) { p(x, 21, C.chairDark); p(x, 23, C.chairDark); }
-    // papeles y taza
-    for (let y = 9; y <= 15; y++) for (let x = 4; x <= 13; x++) p(x, y, [246, 244, 236]);
-    for (let x = 5; x <= 12; x++) p(x, 11, C.floorLine);
-    for (let y = 10; y <= 16; y++) for (let x = 19; x <= 25; x++) p(x, y, C.rug);
-    for (let x = 20; x <= 24; x++) p(x, 10, [246, 244, 236]);
+    for (let y = 7; y <= 31; y++) for (let x = 0; x <= 28; x++) p(x, y, C.desk);
+    for (let x = 0; x <= 28; x++) p(x, 7, C.deskHi);
+    for (let y = 7; y <= 31; y++) p(28, y, C.deskDark);
+    for (let y = 10; y <= 17; y++) for (let x = 3; x <= 13; x++) p(x, y, [246, 244, 236]);  // papeles
+    for (let x = 4; x <= 12; x++) p(x, 13, C.floorLine);
+    for (let y = 11; y <= 18; y++) for (let x = 18; x <= 25; x++) p(x, y, C.rug);           // taza
+    for (let x = 19; x <= 24; x++) p(x, 11, [246, 246, 240]);
+    for (let y = 22; y <= 28; y++) for (let x = 3; x <= 22; x++) p(x, y, C.keys);           // teclado
+    for (let x = 5; x <= 20; x += 3) { p(x, 24, C.chairDark); p(x, 26, C.chairDark); }
+  },
+  deskBL(p) {
+    tiles.floor(p);
+    for (let y = 0; y <= 19; y++) for (let x = 3; x <= 31; x++) p(x, y, C.deskDark);   // frente
+    for (let x = 3; x <= 31; x++) p(x, 0, C.desk);
+    for (let y = 19; y <= 29; y++) for (let x = 6; x <= 10; x++) p(x, y, [92, 62, 38]); // pata
+  },
+  deskBR(p) {
+    tiles.floor(p);
+    for (let y = 0; y <= 19; y++) for (let x = 0; x <= 28; x++) p(x, y, C.deskDark);
+    for (let x = 0; x <= 28; x++) p(x, 0, C.desk);
+    for (let y = 19; y <= 29; y++) for (let x = 21; x <= 25; x++) p(x, y, [92, 62, 38]);
   },
   chair(p) {
     tiles.floor(p);
@@ -152,8 +163,8 @@ const tiles = {
   },
 };
 
-const ORDER = ['floor', 'wall', 'deskL', 'chair', 'plant', 'rug', 'door', 'cabinet', 'deskR',
-               'boardL', 'boardR', 'coffee', 'shelf'];
+const ORDER = ['floor', 'wall', 'deskTL', 'chair', 'plant', 'rug', 'door', 'cabinet', 'deskTR',
+               'boardL', 'boardR', 'coffee', 'shelf', 'deskBL', 'deskBR'];
 const COLS = 8;
 const ROWS = Math.ceil(ORDER.length / COLS);   // varias filas si hacen falta
 const c = new Canvas(COLS * 32, ROWS * 32);
