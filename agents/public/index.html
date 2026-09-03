@@ -649,20 +649,35 @@ function resizeTown(){
   tctx.imageSmoothingEnabled = false;
 }
 window.addEventListener('resize', () => { resizeTown(); });
-// Clic sobre un personaje del pueblo → abre su perfil
-townCanvas.addEventListener('click', (e) => {
+// Convierte la posición del ratón a coordenadas del mundo
+function puntoLienzo(e){
   const r = townCanvas.getBoundingClientRect();
-  const mx = (e.clientX - r.left) / r.width * W_PX;
-  const my = (e.clientY - r.top) / r.height * H_PX;
-  let elegido = null;
+  return { x:(e.clientX-r.left)/r.width*W_PX, y:(e.clientY-r.top)/r.height*H_PX };
+}
+// Devuelve el personaje MÁS CERCANO al punto (tolerante: no hay que acertar el píxel)
+function agenteCercano(px, py, radio){
+  let mejor = null, mejorD = radio*radio;
   for (const a of agents) {
     const ac = actors[a.key]; if(!ac) continue;
-    if (mx >= ac.x+SPR_DX && mx <= ac.x+SPR_DX+SPR && my >= ac.y+SPR_DY && my <= ac.y+32) {
-      // si se solapan, gana el que se dibuja encima (el de abajo del todo)
-      if (!elegido || ac.y > actors[elegido.key].y) elegido = a;
-    }
+    const dx = px-(ac.x+16), dy = py-(ac.y+8);
+    const d = dx*dx + dy*dy;
+    if (d <= mejorD) { mejorD = d; mejor = a; }
   }
-  if (elegido) selectAgent(elegido.key);
+  return mejor;
+}
+let hoverKey = null;
+townCanvas.addEventListener('mousemove', (e) => {
+  const p = puntoLienzo(e);
+  const a = agenteCercano(p.x, p.y, 34);
+  hoverKey = a ? a.key : null;
+  townCanvas.style.cursor = a ? 'pointer' : 'default';
+});
+townCanvas.addEventListener('mouseleave', () => { hoverKey = null; });
+// Clic sobre (o cerca de) un personaje → abre su ficha
+townCanvas.addEventListener('click', (e) => {
+  const p = puntoLienzo(e);
+  const a = agenteCercano(p.x, p.y, 34);
+  if (a) selectAgent(a.key);
 });
 const loadImg = src => new Promise(r=>{ const i=new Image(); i.onload=()=>r(i); i.onerror=()=>r(null); i.src=src; });
 const randPark = () => ({ x:((OFFICE_W+2)+Math.floor(Math.random()*(COLS-OFFICE_W-3)))*TILE,
@@ -712,6 +727,19 @@ function spriteFor(a){
   return sprites[k];
 }
 function drawActor(a,ac){
+  // aro dorado bajo el personaje apuntado o seleccionado
+  if (hoverKey === a.key || selectedAgent === a.key) {
+    tctx.save();
+    tctx.strokeStyle = selectedAgent === a.key ? '#d23b30' : '#f0c43c';
+    tctx.lineWidth = 2.5; tctx.globalAlpha = .95;
+    tctx.beginPath(); tctx.ellipse(ac.x+16, ac.y+30, 13, 5.5, 0, 0, Math.PI*2); tctx.stroke();
+    tctx.restore();
+    if (hoverKey === a.key) {                        // flechita indicadora
+      tctx.save(); tctx.fillStyle='#f0c43c'; tctx.beginPath();
+      tctx.moveTo(ac.x+12, ac.y-22); tctx.lineTo(ac.x+20, ac.y-22); tctx.lineTo(ac.x+16, ac.y-15);
+      tctx.closePath(); tctx.fill(); tctx.restore();
+    }
+  }
   // sombra elíptica: da sensación de peso y de estar sobre el suelo
   tctx.save(); tctx.globalAlpha=.22; tctx.fillStyle='#000';
   tctx.beginPath(); tctx.ellipse(ac.x+16, ac.y+30, 9.5, 3.5, 0, 0, Math.PI*2); tctx.fill(); tctx.restore();
@@ -781,7 +809,7 @@ async function fetchAgents(){
     }
     agents = await getJSON('/api/agents');
     const w = agents.filter(a=>a.state!=='idle').length;
-    $('townLegend').textContent = `🏢 ${w} trabajando en la oficina · 🌳 ${agents.length-w} en el parque`;
+    $('townLegend').textContent = `🏢 ${w} trabajando · 🌳 ${agents.length-w} en el parque · 👆 haz clic en un personaje para ver su ficha`;
     $('working').textContent = w ? `⚙️ ${w} trabajando` : '☕ equipo libre';
   } catch(e){}
 }

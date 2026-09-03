@@ -109,7 +109,11 @@ export function startServer() {
   // ── Tablero estático + sprites/tilesets del pueblo ──
   app.use('/sprites', express.static(path.join(__dirname, '..', 'public', 'assets', 'pokemon')));
   app.use('/fonts', express.static(path.join(__dirname, '..', 'public', 'assets', 'fonts')));
-  app.use(express.static(path.join(__dirname, 'public')));
+  // Sin caché: así los cambios del tablero se ven siempre sin recarga forzada.
+  app.use(express.static(path.join(__dirname, 'public'), {
+    etag: false, lastModified: false,
+    setHeaders: (res) => res.set('Cache-Control', 'no-store'),
+  }));
 
   // Programador: revisa las rutinas cada 30s y crea tareas cuando toca.
   setInterval(() => {
