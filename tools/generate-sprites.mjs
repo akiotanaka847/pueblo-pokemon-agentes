@@ -330,6 +330,25 @@ const CHARS = {
   'tu-entrenador': { kind: 'trainer', skin: SKIN, hair: [60, 40, 30], hairStyle: 'cap', hat: [40, 170, 90], shirt: [60, 60, 70], sleeve: WHITE, pants: [50, 50, 60], shoes: WHITE },
 };
 
+// Contorno: pinta un borde oscuro alrededor de la silueta de cada frame.
+// Es LA técnica que hace legible un sprite sobre cualquier fondo.
+// Se aplica por celda para que el borde no invada el frame vecino.
+function outlineCell(canvas, cx, cy, color = [24, 20, 28, 255]) {
+  const alphaAt = (x, y) => canvas.buf[((cy + y) * canvas.w + (cx + x)) * 4 + 3];
+  const pintar = [];
+  for (let y = 0; y < 32; y++) {
+    for (let x = 0; x < 32; x++) {
+      if (alphaAt(x, y) > 0) continue;                    // ya tiene color
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = x + dx, ny = y + dy;
+        if (nx < 0 || ny < 0 || nx > 31 || ny > 31) continue;
+        if (alphaAt(nx, ny) > 0) { pintar.push([x, y]); break; }
+      }
+    }
+  }
+  for (const [x, y] of pintar) canvas.set(cx + x, cy + y, color);
+}
+
 const DIRS = ['down', 'left', 'right', 'up'];
 
 function buildSheet(name, P) {
@@ -344,6 +363,8 @@ function buildSheet(name, P) {
       else drawTrainer(b, drawDir, frame, P);
     }
   });
+  // contorno en los 12 frames
+  DIRS.forEach((_, row) => { for (let f = 0; f < 3; f++) outlineCell(c, f * 32, row * 32); });
   return c;
 }
 

@@ -12,6 +12,8 @@
     --s1:6px; --s2:10px; --s3:14px; --s4:18px; --r:12px;
   }
   * { box-sizing:border-box; }
+  /* `hidden` debe ganar siempre: si no, cualquier display en CSS lo anula */
+  [hidden] { display:none !important; }
   html { -webkit-text-size-adjust:100%; }
   body { margin:0; background:var(--bg); color:var(--ink);
     font-family:system-ui,-apple-system,"Segoe UI",sans-serif; }
@@ -589,6 +591,20 @@ const DESKS=[[2,3],[5,3],[8,3],[11,3],[2,8],[5,8],[8,8],[11,8]];
 const AGENT_KEYS=Object.keys(CHARS).filter(k=>!['user','system'].includes(k));
 let agents=[], actors={}, sprites={}, bg=null, lastTs=0;
 const townCanvas=$('town'), tctx=townCanvas.getContext('2d');
+const W_PX = COLS*TILE, H_PX = ROWS*TILE;      // tamaño lógico del mundo
+let SCALE = 1;
+// Escala por un factor ENTERO a la resolución real de la pantalla: así los
+// píxeles quedan crujientes en vez de estirarse a un tamaño arbitrario.
+function resizeTown(){
+  const cssW = townCanvas.clientWidth || W_PX;
+  const dpr = window.devicePixelRatio || 1;
+  SCALE = Math.max(1, Math.min(4, Math.round((cssW * dpr) / W_PX)));
+  townCanvas.width = W_PX * SCALE;
+  townCanvas.height = H_PX * SCALE;
+  tctx.setTransform(SCALE, 0, 0, SCALE, 0, 0);
+  tctx.imageSmoothingEnabled = false;
+}
+window.addEventListener('resize', () => { resizeTown(); });
 const loadImg = src => new Promise(r=>{ const i=new Image(); i.onload=()=>r(i); i.onerror=()=>r(null); i.src=src; });
 const randPark = () => ({ x:((OFFICE_W+2)+Math.floor(Math.random()*(COLS-OFFICE_W-3)))*TILE,
                           y:(1+Math.floor(Math.random()*(ROWS-3)))*TILE });
@@ -611,6 +627,7 @@ async function initTown(){
   for(let y=5;y<=8;y++) T(tTs,TOWN.path,OFFICE_W+1,y);
   for(let x=21;x<=24;x++) for(let y=9;y<=12;y++) T(tTs,TOWN.water,x,y);
   for(const [tx,ty] of [[15,1],[18,2],[24,1],[16,12],[19,6],[25,8]]) T(tTs,TOWN.tree,tx,ty);
+  resizeTown();
   requestAnimationFrame(tick);
 }
 function ensureActor(key){
@@ -623,7 +640,7 @@ function drawBubble(cx,topY,text){
   const t = raw.length>30 ? raw.slice(0,30)+'…' : raw;
   tctx.font='9px system-ui';
   const w=Math.min(180,tctx.measureText(t).width+14), hgt=17;
-  const bx=Math.max(2,Math.min(townCanvas.width-w-2,cx-w/2)), by=Math.max(2,topY-hgt-8);
+  const bx=Math.max(2,Math.min(W_PX-w-2,cx-w/2)), by=Math.max(2,topY-hgt-8);
   tctx.fillStyle='#f8f4e3'; tctx.strokeStyle='#2b3a55'; tctx.lineWidth=2;
   tctx.beginPath(); tctx.roundRect(bx,by,w,hgt,5); tctx.fill(); tctx.stroke();
   tctx.beginPath(); tctx.moveTo(cx-4,by+hgt-1); tctx.lineTo(cx,by+hgt+5); tctx.lineTo(cx+4,by+hgt-1);
@@ -636,6 +653,9 @@ function spriteFor(a){
   return sprites[k];
 }
 function drawActor(a,ac){
+  // sombra elíptica: da sensación de peso y de estar sobre el suelo
+  tctx.save(); tctx.globalAlpha=.22; tctx.fillStyle='#000';
+  tctx.beginPath(); tctx.ellipse(ac.x+16, ac.y+30, 9.5, 3.5, 0, 0, Math.PI*2); tctx.fill(); tctx.restore();
   const img=spriteFor(a);
   const frame = ac.moving ? (Math.floor(ac.t/150)%3) : 1;
   if(img) tctx.drawImage(img,frame*32,(DIRROW[ac.dir]||0)*32,32,32,Math.round(ac.x),Math.round(ac.y),32,32);
@@ -648,10 +668,23 @@ function drawActor(a,ac){
   tctx.fillStyle='#fff'; tctx.fillText(a.name || (CHARS[a.key]?CHARS[a.key].n:a.key), ac.x+16, ac.y+41);
   tctx.textAlign='left';
 }
+// Reflejos que se mueven sobre el estanque: vida sin coste de CPU
+function drawWaterShimmer(ts){
+  tctx.save(); tctx.globalAlpha=.22; tctx.fillStyle='#e8f6ff';
+  for(let y=9;y<=12;y++){
+    const off = Math.sin(ts/700 + y*1.3)*7;
+    tctx.fillRect(21*TILE+5+off, y*TILE+11, 17, 2);
+    tctx.fillRect(23*TILE-3-off, y*TILE+21, 12, 2);
+  }
+  tctx.restore();
+}
+
 function tick(ts){
   const dt=Math.min(60,ts-lastTs)||16; lastTs=ts;
-  tctx.clearRect(0,0,townCanvas.width,townCanvas.height);
+  tctx.clearRect(0,0,W_PX,H_PX);
   if(bg) tctx.drawImage(bg,0,0);
+  drawWaterShimmer(ts);
+  const escena=[];
   for(const a of agents){
     const ac=ensureActor(a.key);
     if(a.state==='working'||a.state==='approval'){
@@ -670,8 +703,11 @@ function tick(ts){
       ac.dir = Math.abs(ddx)>Math.abs(ddy) ? (ddx>0?'right':'left') : (ddy>0?'down':'up');
       ac.t+=dt;
     }
-    drawActor(a,ac);
+    escena.push({a,ac});
   }
+  // Orden por profundidad: quien está más abajo se dibuja encima (parece más cerca)
+  escena.sort((p,q)=>p.ac.y-q.ac.y);
+  for(const {a,ac} of escena) drawActor(a,ac);
   requestAnimationFrame(tick);
 }
 async function fetchAgents(){
