@@ -91,15 +91,57 @@ const tiles = {
     }
   },
   rug(p) {
-    for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) p(x, y, C.rug);
-    for (let x = 0; x < 32; x++) { p(x, 0, C.rugEdge); p(x, 31, C.rugEdge); }
-    for (let y = 0; y < 32; y++) { p(0, y, C.rugEdge); p(31, y, C.rugEdge); }
-    for (let y = 6; y < 26; y += 6) for (let x = 5; x < 27; x++) p(x, y, C.rugEdge);
+    tiles.floor(p);
+    for (let y = 2; y <= 29; y++) for (let x = 0; x < 32; x++) p(x, y, C.rug);
+    for (let x = 0; x < 32; x++) { p(x, 2, C.rugEdge); p(x, 29, C.rugEdge); }
+    for (let y = 6; y <= 25; y += 6) for (let x = 3; x < 29; x += 2) p(x, y, C.rugEdge);
+    for (let x = 0; x < 32; x += 3) { p(x, 0, C.rugEdge); p(x, 1, C.rugEdge);      // flecos
+                                      p(x, 30, C.rugEdge); p(x, 31, C.rugEdge); }
   },
   door(p) {
     tiles.floor(p);
     for (let y = 0; y < 32; y++) { for (let x = 0; x <= 3; x++) p(x, y, C.wall); for (let x = 28; x < 32; x++) p(x, y, C.wall); }
     for (let y = 0; y < 32; y++) { p(3, y, C.wallTop); p(28, y, C.wallTop); }
+  },
+  // Pizarra de dos baldosas con notas y diagrama
+  boardL(p) {
+    tiles.floor(p);
+    for (let y = 3; y <= 24; y++) for (let x = 4; x <= 31; x++) p(x, y, [246, 246, 240]);
+    for (let x = 4; x <= 31; x++) { p(x, 3, [120, 126, 140]); p(x, 24, [150, 156, 170]); }
+    for (let y = 3; y <= 24; y++) p(4, y, [120, 126, 140]);
+    for (let x = 9; x <= 24; x++) { p(x, 9, [80, 150, 210]); p(x, 13, [80, 150, 210]); }
+    for (let x = 9; x <= 18; x++) p(x, 17, [220, 90, 80]);
+  },
+  boardR(p) {
+    tiles.floor(p);
+    for (let y = 3; y <= 24; y++) for (let x = 0; x <= 27; x++) p(x, y, [246, 246, 240]);
+    for (let x = 0; x <= 27; x++) { p(x, 3, [120, 126, 140]); p(x, 24, [150, 156, 170]); }
+    for (let y = 3; y <= 24; y++) p(27, y, [120, 126, 140]);
+    for (let y = 7; y <= 12; y++) for (let x = 4; x <= 11; x++) p(x, y, [250, 226, 120]);  // pósit
+    for (let y = 15; y <= 20; y++) for (let x = 14; x <= 21; x++) p(x, y, [170, 220, 170]);
+  },
+  // Rincón de café
+  coffee(p) {
+    tiles.floor(p);
+    for (let y = 16; y <= 28; y++) for (let x = 4; x <= 27; x++) p(x, y, C.desk);
+    for (let x = 4; x <= 27; x++) p(x, 16, C.deskHi);
+    for (let y = 5; y <= 16; y++) for (let x = 8; x <= 18; x++) p(x, y, [70, 74, 88]);   // cafetera
+    for (let y = 7; y <= 11; y++) for (let x = 10; x <= 16; x++) p(x, y, [140, 90, 60]);
+    for (let y = 12; y <= 15; y++) for (let x = 21; x <= 25; x++) p(x, y, [246, 246, 240]); // tazas
+    for (let y = 12; y <= 15; y++) for (let x = 21; x <= 25; x++) if (y === 12) p(x, y, C.rug);
+  },
+  // Estantería con libros de colores
+  shelf(p) {
+    tiles.floor(p);
+    for (let y = 2; y <= 30; y++) for (let x = 5; x <= 27; x++) p(x, y, [150, 106, 68]);
+    for (const yy of [2, 11, 20, 29]) for (let x = 5; x <= 27; x++) p(x, yy, [116, 80, 50]);
+    const libros = [[220, 90, 80], [80, 150, 210], [240, 200, 90], [120, 190, 130], [200, 130, 210]];
+    for (const base of [3, 12, 21]) {
+      for (let i = 0; i < 5; i++) {
+        const x = 7 + i * 4;
+        for (let y = base + 1; y <= base + 7; y++) for (let dx = 0; dx < 3; dx++) p(x + dx, y, libros[(i + base) % 5]);
+      }
+    }
   },
   cabinet(p) {
     tiles.floor(p);
@@ -110,7 +152,8 @@ const tiles = {
   },
 };
 
-const ORDER = ['floor', 'wall', 'deskL', 'chair', 'plant', 'rug', 'door', 'cabinet', 'deskR'];
+const ORDER = ['floor', 'wall', 'deskL', 'chair', 'plant', 'rug', 'door', 'cabinet', 'deskR',
+               'boardL', 'boardR', 'coffee', 'shelf'];
 const COLS = 8;
 const ROWS = Math.ceil(ORDER.length / COLS);   // varias filas si hacen falta
 const c = new Canvas(COLS * 32, ROWS * 32);

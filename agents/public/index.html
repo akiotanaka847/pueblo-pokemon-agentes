@@ -628,7 +628,8 @@ function stopVisit(){
 // ─────────── Vista viva del pueblo: oficina (trabajando) + parque (libres) ───────────
 const TILE=32, COLS=26, ROWS=14, OFFICE_W=13;
 const SPR=48, SPR_DX=-8, SPR_DY=-16;   // fotograma 48x48 anclado por los pies
-const OFF={floor:0,wall:1,deskL:2,chair:3,plant:4,rug:5,door:6,cabinet:7,deskR:8};
+const OFF={floor:0,wall:1,deskL:2,chair:3,plant:4,rug:5,door:6,cabinet:7,deskR:8,
+           boardL:9,boardR:10,coffee:11,shelf:12};
 const TOWN={grass:0,grass2:1,tallgrass:2,path:3,water:4,flowerR:5,flowerY:6,tree:7};
 const DIRROW={down:0,left:1,right:2,up:3};
 const DESKS=[[2,3],[5,3],[8,3],[11,3],[2,8],[5,8],[8,8],[11,8]];
@@ -694,6 +695,10 @@ async function initTown(){
   for(let x=4;x<=8;x++) for(let y=5;y<=6;y++) T(oTs,OFF.rug,x,y);
   for(const [dx,dy] of DESKS){ T(oTs,OFF.deskL,dx,dy); T(oTs,OFF.deskR,dx+1,dy); T(oTs,OFF.chair,dx,dy+1); }
   T(oTs,OFF.plant,0,0); T(oTs,OFF.plant,12,13); T(oTs,OFF.cabinet,0,12); T(oTs,OFF.cabinet,12,0);
+  T(oTs,OFF.boardL,4,0); T(oTs,OFF.boardR,5,0);      // pizarra del equipo
+  T(oTs,OFF.coffee,11,12); T(oTs,OFF.plant,10,12);   // rincón de café
+  T(oTs,OFF.shelf,0,4); T(oTs,OFF.shelf,0,5);        // estantería
+  T(oTs,OFF.plant,0,8);
   for(let y=0;y<ROWS;y++) T(oTs,(y===6||y===7)?OFF.door:OFF.wall,OFFICE_W,y);
   for(let x=OFFICE_W+1;x<COLS;x++) for(let y=0;y<ROWS;y++){
     const hh=(x*7+y*13)%11; T(tTs, hh<1?TOWN.flowerY : hh<2?TOWN.grass2 : TOWN.grass, x, y);
