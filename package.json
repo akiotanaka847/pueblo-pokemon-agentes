@@ -8,6 +8,7 @@
   "scripts": {
     "agents": "tsx agents/run.ts",
     "sprites": "node tools/generate-sprites.mjs",
+    "sprites:ia": "node tools/generate-sprites-ai.mjs",
     "map": "node tools/generate-map.mjs",
     "office": "node tools/generate-office.mjs",
     "hub": "tsx hub/server.ts"
@@ -22,6 +23,7 @@
     "ai": "^7.0.30",
     "dotenv": "^16.6.1",
     "express": "^5.2.1",
+    "sharp": "^0.35.4",
     "zod": "^4.4.3"
   },
   "devDependencies": {

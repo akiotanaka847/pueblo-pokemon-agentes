@@ -112,15 +112,35 @@ tools/            generadores pixel-art (sprites, mapa, oficina)
 
 ## 🎨 Regenerar los gráficos
 
-Todo el pixel-art se genera por código, sin dependencias externas:
+Los escenarios se generan por código, sin dependencias externas:
 
 ```bash
-npm run sprites   # personajes (walk-cycle 4 direcciones)
 npm run map       # tileset del pueblo
 npm run office    # tileset de la oficina
+npm run sprites   # personajes dibujados por código (versión sencilla)
 ```
 
-Edita las paletas y formas en `tools/` y vuelve a ejecutarlos.
+Los **personajes** se generan con IA, que da mucha mejor calidad. Necesita
+`OPENAI_API_KEY` en `agents/.env`:
+
+```bash
+npm run sprites:ia -- ash        # un personaje (prueba)
+npm run sprites:ia -- --todos    # los nueve
+```
+
+Cómo funciona: pide **una sola imagen** con las tres vistas (frente, perfil y
+espalda) — dentro de una misma generación el modelo mantiene el mismo personaje,
+cosa que no ocurre si pides cada vista por separado. Después limpia el fondo,
+localiza cada vista leyendo el canal alfa, espeja el perfil para obtener el
+derecho y monta la rejilla de 48x48.
+
+- Las descripciones están en `PERSONAJES`, dentro de `tools/generate-sprites-ai.mjs`.
+- `-- --rehacer` reprocesa las imágenes ya descargadas **sin volver a pagar** la
+  generación: útil para afinar el recorte.
+- Si el filtro de contenido de OpenAI rechaza una descripción, ese personaje se
+  anota y el resto continúa. Suele pasar cuando la descripción se acerca
+  demasiado a un personaje con copyright: reescríbela como personaje propio.
+- Las imágenes originales quedan en `.preview/ia-crudo/` (no se publican).
 
 ## 👥 Crear tus propios agentes
 

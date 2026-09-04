@@ -158,7 +158,10 @@ export function startServer() {
   });
 
   // ── Tablero estático + sprites/tilesets del pueblo ──
-  app.use('/sprites', express.static(path.join(__dirname, '..', 'public', 'assets', 'pokemon')));
+  // Sin caché también aquí: al regenerar los sprites se ven al recargar, sin
+  // tener que forzar el vaciado del navegador.
+  const sinCache = { etag: false, lastModified: false, setHeaders: (r: any) => r.set('Cache-Control', 'no-store') };
+  app.use('/sprites', express.static(path.join(__dirname, '..', 'public', 'assets', 'pokemon'), sinCache));
   app.use('/fonts', express.static(path.join(__dirname, '..', 'public', 'assets', 'fonts')));
   // Sin caché: así los cambios del tablero se ven siempre sin recarga forzada.
   app.use(express.static(path.join(__dirname, 'public'), {

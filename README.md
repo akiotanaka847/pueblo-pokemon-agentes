@@ -157,9 +157,12 @@ tools/             generadores pixel-art (sprites, mapa, oficina)
 
 ## 🎨 Sobre los recursos gráficos y el sonido
 
-Los **sprites, tilesets y jingles son originales**, generados por código en
-[`tools/`](tools/) (codificador PNG propio) y con la Web Audio API. No se usa
-ningún recurso extraído de los juegos.
+Los **tilesets y los jingles son originales**, generados por código en
+[`tools/`](tools/) (codificador PNG propio) y con la Web Audio API.
+
+Los **sprites de los personajes** se generan con IA a partir de descripciones
+propias, con `npm run sprites:ia` (ver [SETUP.md](SETUP.md)). No se usa ningún
+recurso extraído de los juegos.
 
 ## 📜 Licencia
 
