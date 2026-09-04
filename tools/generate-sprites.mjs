@@ -216,18 +216,14 @@ function drawPikachu(b, dir, frame) {
   const salto = frame === 1 ? 0 : 1;
   const perfil = dir === 'right';   // 'left' se dibuja igual y se espeja
 
-  // ── Cola en zigzag ──
-  // Va detrás del cuerpo, así que se pinta antes. De perfil sale por la espalda
-  // (a la izquierda, porque el personaje mira a la derecha); de frente y de
-  // espaldas asoma por el lado.
-  // El cuerpo llega hasta x=37, así que la cola tiene que quedar POR FUERA de
-  // esa silueta: dibujada por dentro, el cuerpo la tapaba y solo asomaba un muñón.
+  // ── Cola ──
+  // Va detrás del cuerpo, así que se pinta primero, y siempre POR FUERA de la
+  // silueta: dibujada por dentro, el cuerpo la tapaba y solo asomaba un muñón.
   if (perfil) {
-    b.rect(8, 31, 12, 36, BR);                                   // arranque marrón
-    b.rect(4, 26, 9, 32, Y);
-    b.rect(7, 21, 12, 27, Y);
-    b.rect(3, 17, 9, 22, Y);
-    b.rect(3, 17, 9, 19, YL);                                    // brillo en la punta
+    b.rect(11, 31, 14, 35, BR);
+    b.rect(8, 27, 12, 32, Y);
+    b.rect(10, 23, 13, 28, Y);
+    b.rect(6, 18, 11, 24, Y);
   } else {
     b.rect(36, 31, 40, 36, BR);
     b.rect(39, 26, 44, 32, Y);
@@ -237,28 +233,41 @@ function drawPikachu(b, dir, frame) {
   }
 
   // ── Orejas ──
-  // De perfil se juntan y la de detrás queda más corta: así se lee la profundidad
-  // en vez de parecer la misma silueta girada.
   if (perfil) {
-    // Separadas 3 px: pegadas, el contorno las fundía en una sola mancha.
-    b.rect(17, 8, 22, 15, YS); b.rect(17, 8, 22, 11, OUT);       // oreja lejana, más corta
-    b.rect(23, 2, 28, 15, Y);  b.rect(23, 2, 28, 5, OUT);        // oreja cercana
+    // Una sola oreja: ancha en la base y escalonada hacia atrás, para que se
+    // lea como oreja. Vertical y estrecha parecía un cuerno, y la segunda oreja
+    // solo añadía una mancha suelta encima de la cabeza.
+    b.rect(19, 10, 27, 15, Y);                                   // base ancha
+    b.rect(21, 5, 27, 11, Y);                                    // escalón
+    b.rect(23, 1, 28, 6, Y); b.rect(23, 1, 28, 4, OUT);          // punta negra
   } else {
     b.rect(13, 2, 18, 14, Y); b.rect(13, 2, 18, 5, OUT);
     b.rect(29, 2, 34, 14, Y); b.rect(29, 2, 34, 5, OUT);
-    if (dir === 'up') {                                          // de espaldas se ve el dorso
-      b.rect(14, 6, 17, 14, YS); b.rect(30, 6, 33, 14, YS);
-    }
+    if (dir === 'up') { b.rect(14, 6, 17, 14, YS); b.rect(30, 6, 33, 14, YS); }
   }
 
-  b.rect(12, 13, 35, 41 - salto, Y);                             // cuerpo
-  b.rect(10, 18, 12, 36, Y); b.rect(35, 18, 37, 36, Y);
-  b.rect(31, 15, 35, 40 - salto, YS);                            // sombreado
-  b.rect(13, 14, 30, 15, YL);                                    // brillo
-
-  if (dir === 'up') { b.rect(12, 19, 35, 21, BR); b.rect(12, 25, 35, 27, BR); }
-
-  b.rect(14, 41 - salto, 20, 44, YS); b.rect(27, 41 - salto, 33, 44, YS);  // pies
+  // ── Cuerpo ──
+  if (perfil) {
+    // De perfil el cuerpo es más estrecho y el hocico SOBRESALE de la silueta.
+    // Con el morro metido por dentro solo cambiaba el sombreado, y de lado se
+    // veía la misma bola que de frente: en pixel-art lo que distingue una vista
+    // de otra es el contorno, no el detalle interior.
+    b.rect(14, 13, 34, 41 - salto, Y);
+    b.rect(12, 20, 15, 35, Y);                                   // grupa, hacia atrás
+    b.rect(29, 15, 34, 40 - salto, YS);                          // sombra del lomo
+    b.rect(15, 14, 28, 15, YL);                                  // brillo
+    b.rect(34, 23, 36, 27, Y);                                   // hocico: un escalón, no una caja
+    b.rect(34, 25, 36, 27, YS);
+    b.rect(16, 41 - salto, 22, 44, YS);                          // patas en fila
+    b.rect(25, 41 - salto, 31, 44, YS);
+  } else {
+    b.rect(12, 13, 35, 41 - salto, Y);
+    b.rect(10, 18, 12, 36, Y); b.rect(35, 18, 37, 36, Y);
+    b.rect(31, 15, 35, 40 - salto, YS);
+    b.rect(13, 14, 30, 15, YL);
+    if (dir === 'up') { b.rect(12, 19, 35, 21, BR); b.rect(12, 25, 35, 27, BR); }
+    b.rect(14, 41 - salto, 20, 44, YS); b.rect(27, 41 - salto, 33, 44, YS);
+  }
 
   // ── Cara ──
   if (dir === 'down') {
@@ -267,12 +276,11 @@ function drawPikachu(b, dir, frame) {
     b.rect(27, 19, 30, 24, OUT); b.px(28, 20, WHITE);
     b.rect(22, 26, 25, 27, OUT);                                 // boca
   } else if (perfil) {
-    // De perfil solo se ve UNA mejilla y UN ojo: antes se pintaban los dos de
-    // cada uno y el ojo de la cara oculta quedaba flotando en el aire.
-    b.rect(23, 26, 28, 31, RED);
-    b.rect(28, 19, 31, 24, OUT); b.px(29, 20, WHITE);
-    b.rect(32, 23, 35, 25, YS);                                  // hocico
-    b.rect(32, 26, 35, 27, OUT);                                 // boca de lado
+    // Una sola mejilla y un solo ojo: antes se pintaban los dos de cada uno y
+    // el ojo de la cara oculta quedaba flotando en el aire.
+    b.rect(20, 27, 25, 32, RED);
+    b.rect(28, 20, 30, 23, OUT); b.px(28, 20, WHITE);
+    b.rect(32, 26, 34, 27, OUT);                                 // boca, en el borde de la cara
   }
 }
 
