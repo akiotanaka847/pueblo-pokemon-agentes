@@ -128,6 +128,17 @@ npm run sprites:ia -- ash        # un personaje (prueba)
 npm run sprites:ia -- --todos    # los nueve
 ```
 
+Hay **dos motores de imagen**. Por defecto usa OpenAI; con `--motor=google` usa
+Gemini (`GOOGLE_API_KEY` en `agents/.env`), que da mejor calidad en criaturas:
+
+```bash
+npm run sprites:ia -- pikachu --motor=google
+```
+
+Gemini no sabe devolver fondo transparente, así que se le pide **magenta puro** y
+se recorta por color. `limpiarFondo()` detecta sola con qué caso trata: si llega
+transparencia real umbraliza el alfa, y si llega opaca aplica el croma.
+
 Cómo funciona: pide **una sola imagen** con las tres vistas (frente, perfil y
 espalda) — dentro de una misma generación el modelo mantiene el mismo personaje,
 cosa que no ocurre si pides cada vista por separado. Después limpia el fondo,
@@ -141,6 +152,9 @@ derecho y monta la rejilla de 48x48.
   anota y el resto continúa. Suele pasar cuando la descripción se acerca
   demasiado a un personaje con copyright: reescríbela como personaje propio.
 - Las imágenes originales quedan en `.preview/ia-crudo/` (no se publican).
+- `ALTURA` fija la altura relativa de cada personaje. Las criaturas van al 62-68%
+  para que no midan lo mismo que un adulto. Los sprites se anclan por los **pies**,
+  así los bajitos se apoyan en el suelo en vez de quedar flotando.
 
 ## 👥 Crear tus propios agentes
 
