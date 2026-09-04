@@ -35,6 +35,27 @@ Este archivo es **local y está fuera de git**. Contiene:
 - **Todos**: pon `BRAIN=openai` en `agents/.env` y reinicia.
 - **Solo uno**: en `agents/roster.ts`, añade `brain: 'openai'` a ese personaje.
 
+### Proveedores baratos (`BRAIN=custom`)
+
+`custom` vale para cualquier API compatible con OpenAI. Estos dos están
+**probados con llamada a herramientas**, que es lo que necesitan los agentes —
+un modelo que no sepa llamar herramientas no sirve como cerebro por barato que sea:
+
+| Proveedor | `CUSTOM_BASE_URL` | `CUSTOM_MODEL` |
+|---|---|---|
+| DeepSeek | `https://api.deepseek.com/v1` | `deepseek-v4-flash` |
+| Kimi (Moonshot) | `https://api.moonshot.ai/v1` | `kimi-k2.6` |
+
+Pon los tres valores (`CUSTOM_BASE_URL`, `CUSTOM_API_KEY`, `CUSTOM_MODEL`) y
+`BRAIN=custom` en `agents/.env`.
+
+Dos avisos si pruebas otros modelos:
+
+- **Cuidado con los modelos de razonamiento** en tareas mecánicas. Emiten el
+  pensamiento aparte (`reasoning_content`) y pueden gastar el presupuesto entero
+  pensando sin llegar a responder.
+- Kimi usa `api.moonshot.**ai**`; el dominio `.cn` devuelve la lista vacía.
+
 ## 🧑‍🤝‍🧑 El equipo
 
 | Personaje | Rol |
