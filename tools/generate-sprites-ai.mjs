@@ -209,6 +209,90 @@ async function encajar(bufer, bajar = 0, escala = 1) {
     .png().toBuffer();
 }
 
+// Al reducir de ~250 px a 29, el brillo del ojo cae en un sitio distinto en
+// cada ojo: en uno se pierde y en el otro parte el negro en forma de cruz, y
+// los dos acaban de tamaños distintos. En vez de parchear el hueco, se
+// REDIBUJAN: se localizan las manchas oscuras del tamaño de un ojo, se igualan
+// en tamaño y altura, y se les repone el brillo. Sin ese brillo un ojo es solo
+// una mancha negra; con él vuelve a leerse como ojo.
+function manchasOscuras(data, width, height) {
+  const oscuro = (x, y) => {
+    const i = (y * width + x) * 4;
+    return data[i + 3] > 0 && (0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]) < 80;
+  };
+  const visto = new Uint8Array(width * height);
+  const fuera = [];
+  for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+    if (visto[y * width + x] || !oscuro(x, y)) continue;
+    const pila = [[x, y]];
+    visto[y * width + x] = 1;
+    let n = 0, x0 = x, x1 = x, y0 = y, y1 = y, ref = (y * width + x) * 4;
+    while (pila.length) {
+      const [cx, cy] = pila.pop();
+      n++;
+      x0 = Math.min(x0, cx); x1 = Math.max(x1, cx);
+      y0 = Math.min(y0, cy); y1 = Math.max(y1, cy);
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = cx + dx, ny = cy + dy;
+        if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
+        if (visto[ny * width + nx] || !oscuro(nx, ny)) continue;
+        visto[ny * width + nx] = 1;
+        pila.push([nx, ny]);
+      }
+    }
+    const w = x1 - x0 + 1, h = y1 - y0 + 1;
+    if (n >= 3 && n <= 14 && w <= 4 && h <= 4) fuera.push({ x0, y0, w, h, ref });
+  }
+  return fuera;
+}
+
+async function dibujarOjos(png) {
+  const { data, info } = await sharp(png).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  const { width, height } = info;
+  const salida = Buffer.from(data);
+
+  const pinta = (x, y, r, g, b) => {
+    if (x < 0 || y < 0 || x >= width || y >= height) return;
+    const i = (y * width + x) * 4;
+    salida[i] = r; salida[i + 1] = g; salida[i + 2] = b; salida[i + 3] = 255;
+  };
+
+  // Se agrupan por fotograma: cada uno tiene sus propios ojos.
+  const porFrame = new Map();
+  for (const m of manchasOscuras(data, width, height)) {
+    const clave = `${Math.floor(m.x0 / SIZE)},${Math.floor(m.y0 / SIZE)}`;
+    if (!porFrame.has(clave)) porFrame.set(clave, []);
+    porFrame.get(clave).push(m);
+  }
+
+  for (const [clave, manchas] of porFrame) {
+    // Un fotograma tiene muchas manchas pequeñas: casi todas son fragmentos del
+    // contorno, de un solo pixel de ancho. Los ojos son los únicos de 2 o más
+    // de ancho en la mitad superior, y ambos arrancan en la misma fila.
+    const arribaDe = Number(clave.split(',')[1]) * SIZE + SIZE * 0.62;
+    const cand = manchas.filter((m) => m.w >= 2 && m.y0 < arribaDe).sort((a, b) => a.x0 - b.x0);
+
+    let par = null;
+    for (let i = 0; i < cand.length && !par; i++)
+      for (let j = i + 1; j < cand.length && !par; j++)
+        if (Math.abs(cand[i].y0 - cand[j].y0) <= 1) par = [cand[i], cand[j]];
+    if (!par) continue;
+
+    // Se igualan tamaño y altura: eso era lo que hacía que uno se viera más
+    // grande. Se toma el MAYOR de los dos, porque si no la cruz asomaría por
+    // fuera del relleno y quedarían píxeles sueltos.
+    const w = Math.max(par[0].w, par[1].w);
+    const h = Math.max(par[0].h, par[1].h);
+    const y0 = Math.min(par[0].y0, par[1].y0);
+    for (const m of par) {
+      const r = data[m.ref], g = data[m.ref + 1], b = data[m.ref + 2];
+      for (let y = y0; y < y0 + h; y++) for (let x = m.x0; x < m.x0 + w; x++) pinta(x, y, r, g, b);
+      pinta(m.x0, y0, 255, 255, 255);   // brillo, en la misma esquina de ambos
+    }
+  }
+  return sharp(salida, { raw: { width, height, channels: 4 } }).png().toBuffer();
+}
+
 async function hoja(clave) {
   const desc = PERSONAJES[clave];
   if (!desc) throw new Error(`Personaje desconocido: ${clave}`);
@@ -251,8 +335,9 @@ async function hoja(clave) {
       capas.push({ input: img, left: col * SIZE, top: fila * SIZE }));
   });
 
-  const png = await sharp({ create: { width: SIZE * 3, height: SIZE * 4, channels: 4,
+  const bruto = await sharp({ create: { width: SIZE * 3, height: SIZE * 4, channels: 4,
       background: { r: 0, g: 0, b: 0, alpha: 0 } } }).composite(capas).png().toBuffer();
+  const png = await dibujarOjos(bruto);
   fs.writeFileSync(path.join(OUT, `${clave}.png`), png);
   console.log(`   ✔ ${clave}.png (${SIZE * 3}x${SIZE * 4})`);
 }
