@@ -695,6 +695,7 @@ function stopVisit(){
 
 // ─────────── Vista viva del pueblo: oficina (trabajando) + parque (libres) ───────────
 const TILE=32, COLS=26, ROWS=14, OFFICE_W=13;
+const carteles=[];   // rectángulos de los nombres ya dibujados en este fotograma
 const SPR=48;                          // lado del fotograma en el PNG
 const SPR_DRAW=48;                     // 1,5 baldosas de alto (proporción RPG clásica)
 const SPR_K=SPR_DRAW/SPR;
@@ -753,8 +754,22 @@ townCanvas.addEventListener('click', (e) => {
   if (a) selectAgent(a.key);
 });
 const loadImg = src => new Promise(r=>{ const i=new Image(); i.onload=()=>r(i); i.onerror=()=>r(null); i.src=src; });
-const randPark = () => ({ x:((OFFICE_W+2)+Math.floor(Math.random()*(COLS-OFFICE_W-3)))*TILE,
-                          y:(1+Math.floor(Math.random()*(ROWS-3)))*TILE });
+// Casillas que no se pisan (agua y árboles). Se rellena al construir el mapa,
+// así el dibujo y las colisiones nunca se contradicen.
+const BLOQUEADO = new Set();
+const bloquear = (tx,ty) => BLOQUEADO.add(tx+','+ty);
+// Se mira la casilla donde están los PIES, no el centro del sprite: si no, el
+// personaje entra medio cuerpo en el agua antes de que se le frene.
+const pisable = (px,py) => !BLOQUEADO.has(Math.floor((px+16)/TILE)+','+Math.floor((py+40)/TILE));
+
+const randPark = () => {
+  for(let i=0;i<40;i++){
+    const x=((OFFICE_W+2)+Math.floor(Math.random()*(COLS-OFFICE_W-3)))*TILE;
+    const y=(1+Math.floor(Math.random()*(ROWS-3)))*TILE;
+    if(pisable(x,y)) return {x,y};
+  }
+  return { x:(OFFICE_W+2)*TILE, y:2*TILE };     // rincón siempre libre
+};
 
 async function initTown(){
   const [oTs,tTs] = await Promise.all([loadImg('/sprites/office-tileset.png'), loadImg('/sprites/town-tileset.png')]);
@@ -780,8 +795,8 @@ async function initTown(){
     const hh=(x*7+y*13)%11; T(tTs, hh<1?TOWN.flowerY : hh<2?TOWN.grass2 : TOWN.grass, x, y);
   }
   for(let y=5;y<=8;y++) T(tTs,TOWN.path,OFFICE_W+1,y);
-  for(let x=21;x<=24;x++) for(let y=9;y<=12;y++) T(tTs,TOWN.water,x,y);
-  for(const [tx,ty] of [[15,1],[18,2],[24,1],[16,12],[19,6],[25,8]]) T(tTs,TOWN.tree,tx,ty);
+  for(let x=21;x<=24;x++) for(let y=9;y<=12;y++){ T(tTs,TOWN.water,x,y); bloquear(x,y); }
+  for(const [tx,ty] of [[15,1],[18,2],[24,1],[16,12],[19,6],[25,8]]){ T(tTs,TOWN.tree,tx,ty); bloquear(tx,ty); }
   resizeTown();
   requestAnimationFrame(tick);
 }
@@ -837,9 +852,21 @@ function drawActor(a,ac){
   const icon = a.state==='approval'?'✋' : a.state==='working'?'💻' : '';
   if(icon){ tctx.font='15px system-ui'; tctx.textAlign='left'; tctx.fillStyle='#2b3a55'; tctx.fillText(icon,ac.x+26,ac.y-4); }
   tctx.font='9px system-ui'; tctx.textAlign='center';
+  const nombre = a.name || (CHARS[a.key]?CHARS[a.key].n:a.key);
+  // Ancho a medida: con caja fija de 44 px los nombres largos se salían.
+  const ancho = Math.ceil(tctx.measureText(nombre).width)+10;
+  let cx = ac.x+16-ancho/2, cy = ac.y+32;
+  // Si el cartel choca con otro ya dibujado en este fotograma, se baja hasta
+  // encontrar hueco. Los actores vienen ordenados por profundidad, así que el
+  // que está delante conserva su sitio y el de detrás cede.
+  for(let intento=0; intento<6; intento++){
+    if(!carteles.some(r => cx<r.x+r.w && cx+ancho>r.x && cy<r.y+r.h && cy+12>r.y)) break;
+    cy += 13;
+  }
+  carteles.push({x:cx,y:cy,w:ancho,h:12});
   tctx.fillStyle = a.state==='idle' ? 'rgba(0,0,0,.5)' : '#1f6f2f';
-  tctx.fillRect(ac.x-6,ac.y+32,44,12);
-  tctx.fillStyle='#fff'; tctx.fillText(a.name || (CHARS[a.key]?CHARS[a.key].n:a.key), ac.x+16, ac.y+41);
+  tctx.fillRect(cx,cy,ancho,12);
+  tctx.fillStyle='#fff'; tctx.fillText(nombre, cx+ancho/2, cy+9);
   tctx.textAlign='left';
 }
 // Reflejos que se mueven sobre el estanque: vida sin coste de CPU
@@ -887,7 +914,16 @@ function tick(ts){
     ac.moving = dist>2;
     if(ac.moving){
       const step=Math.min(dist,0.12*dt);
-      ac.x+=ddx/dist*step; ac.y+=ddy/dist*step;
+      const nx=ac.x+ddx/dist*step, ny=ac.y+ddy/dist*step;
+      // Se prueba cada eje por separado: así, al topar con el estanque, el
+      // personaje se desliza bordeándolo en vez de quedarse clavado de frente.
+      // Si ya está DENTRO de una casilla bloqueada, se le deja salir: con las
+      // colisiones activas los dos ejes le fallarían y quedaría encerrado.
+      const atrapado = !pisable(ac.x, ac.y);
+      const okX = atrapado || pisable(nx, ac.y), okY = atrapado || pisable(ac.x, ny);
+      if(okX) ac.x=nx;
+      if(okY) ac.y=ny;
+      if(!okX && !okY){ const p=randPark(); ac.tx=p.x; ac.ty=p.y; }   // atascado: otro destino
       ac.dir = Math.abs(ddx)>Math.abs(ddy) ? (ddx>0?'right':'left') : (ddy>0?'down':'up');
       ac.t+=dt;
     }
@@ -895,6 +931,7 @@ function tick(ts){
   }
   // Orden por profundidad: quien está más abajo se dibuja encima (parece más cerca)
   escena.sort((p,q)=>p.ac.y-q.ac.y);
+  carteles.length = 0;
   for(const {a,ac} of escena) drawActor(a,ac);
   requestAnimationFrame(tick);
 }
