@@ -34,7 +34,7 @@ export function getModel(brain?: BrainId): { id: BrainId; label: string; model: 
     if (!baseURL || !model) {
       throw new Error(
         'Cerebro "custom": faltan CUSTOM_BASE_URL y/o CUSTOM_MODEL en agents/.env. ' +
-          'Ejemplo DeepSeek: CUSTOM_BASE_URL=https://api.deepseek.com/v1 CUSTOM_MODEL=deepseek-chat',
+          'Ejemplo DeepSeek: CUSTOM_BASE_URL=https://api.deepseek.com/v1 CUSTOM_MODEL=deepseek-v4-flash',
       );
     }
     const nombre = process.env.CUSTOM_NAME || 'Personalizado';

@@ -10,6 +10,7 @@
 //  Salida: public/assets/pokemon/<nombre>.png  +  contact sheet de preview
 // ─────────────────────────────────────────────────────────────
 import zlib from 'node:zlib';
+import sharp from 'sharp';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -213,12 +214,42 @@ function drawPikachu(b, dir, frame) {
   const Y = [252, 218, 60], YS = [212, 172, 30], YL = [255, 240, 140];
   const RED = [226, 74, 62], BR = [150, 100, 36];
   const salto = frame === 1 ? 0 : 1;
+  const perfil = dir === 'right';   // 'left' se dibuja igual y se espeja
 
-  if (dir !== 'up') { b.rect(33, 24, 37, 30, BR); b.rect(36, 20, 40, 24, Y); b.rect(38, 14, 42, 20, Y); b.rect(35, 12, 40, 16, Y); }
-  else { b.rect(30, 8, 35, 28, Y); }
+  // ── Cola en zigzag ──
+  // Va detrás del cuerpo, así que se pinta antes. De perfil sale por la espalda
+  // (a la izquierda, porque el personaje mira a la derecha); de frente y de
+  // espaldas asoma por el lado.
+  // El cuerpo llega hasta x=37, así que la cola tiene que quedar POR FUERA de
+  // esa silueta: dibujada por dentro, el cuerpo la tapaba y solo asomaba un muñón.
+  if (perfil) {
+    b.rect(8, 31, 12, 36, BR);                                   // arranque marrón
+    b.rect(4, 26, 9, 32, Y);
+    b.rect(7, 21, 12, 27, Y);
+    b.rect(3, 17, 9, 22, Y);
+    b.rect(3, 17, 9, 19, YL);                                    // brillo en la punta
+  } else {
+    b.rect(36, 31, 40, 36, BR);
+    b.rect(39, 26, 44, 32, Y);
+    b.rect(36, 21, 41, 27, Y);
+    b.rect(39, 17, 45, 22, Y);
+    b.rect(39, 17, 45, 19, YL);
+  }
 
-  b.rect(13, 2, 18, 14, Y); b.rect(13, 2, 18, 5, OUT);          // orejas
-  b.rect(29, 2, 34, 14, Y); b.rect(29, 2, 34, 5, OUT);
+  // ── Orejas ──
+  // De perfil se juntan y la de detrás queda más corta: así se lee la profundidad
+  // en vez de parecer la misma silueta girada.
+  if (perfil) {
+    // Separadas 3 px: pegadas, el contorno las fundía en una sola mancha.
+    b.rect(17, 8, 22, 15, YS); b.rect(17, 8, 22, 11, OUT);       // oreja lejana, más corta
+    b.rect(23, 2, 28, 15, Y);  b.rect(23, 2, 28, 5, OUT);        // oreja cercana
+  } else {
+    b.rect(13, 2, 18, 14, Y); b.rect(13, 2, 18, 5, OUT);
+    b.rect(29, 2, 34, 14, Y); b.rect(29, 2, 34, 5, OUT);
+    if (dir === 'up') {                                          // de espaldas se ve el dorso
+      b.rect(14, 6, 17, 14, YS); b.rect(30, 6, 33, 14, YS);
+    }
+  }
 
   b.rect(12, 13, 35, 41 - salto, Y);                             // cuerpo
   b.rect(10, 18, 12, 36, Y); b.rect(35, 18, 37, 36, Y);
@@ -229,16 +260,19 @@ function drawPikachu(b, dir, frame) {
 
   b.rect(14, 41 - salto, 20, 44, YS); b.rect(27, 41 - salto, 33, 44, YS);  // pies
 
-  if (dir !== 'up') {
-    b.rect(11, 26, 16, 31, RED); b.rect(31, 26, 36, 31, RED);     // mejillas
-    if (dir === 'down') {
-      b.rect(17, 19, 20, 24, OUT); b.px(18, 20, WHITE);
-      b.rect(27, 19, 30, 24, OUT); b.px(28, 20, WHITE);
-      b.rect(22, 26, 25, 27, OUT);
-    } else {
-      b.rect(27, 19, 30, 24, OUT); b.px(28, 20, WHITE);
-      b.rect(32, 25, 34, 26, OUT);
-    }
+  // ── Cara ──
+  if (dir === 'down') {
+    b.rect(11, 26, 16, 31, RED); b.rect(31, 26, 36, 31, RED);     // dos mejillas
+    b.rect(17, 19, 20, 24, OUT); b.px(18, 20, WHITE);
+    b.rect(27, 19, 30, 24, OUT); b.px(28, 20, WHITE);
+    b.rect(22, 26, 25, 27, OUT);                                 // boca
+  } else if (perfil) {
+    // De perfil solo se ve UNA mejilla y UN ojo: antes se pintaban los dos de
+    // cada uno y el ojo de la cara oculta quedaba flotando en el aire.
+    b.rect(23, 26, 28, 31, RED);
+    b.rect(28, 19, 31, 24, OUT); b.px(29, 20, WHITE);
+    b.rect(32, 23, 35, 25, YS);                                  // hocico
+    b.rect(32, 26, 35, 27, OUT);                                 // boca de lado
   }
 }
 
@@ -328,29 +362,67 @@ function buildSheet(name, P) {
   return c;
 }
 
+// Altura relativa. Sin esto las criaturas acaban midiendo lo mismo que un
+// adulto, porque todos los fotogramas ocupan la misma caja de 48x48.
+const ESCALA = { pikachu: 0.62, meowth: 0.68 };
+
+// Reduce cada fotograma y lo vuelve a anclar POR LOS PIES: anclándolo arriba,
+// un personaje más bajo quedaría flotando sobre el suelo.
+async function reducir(png, escala) {
+  const capas = [];
+  for (let fila = 0; fila < 4; fila++) for (let col = 0; col < 3; col++) {
+    const bruto = await sharp(png).extract({ left: col * SIZE, top: fila * SIZE, width: SIZE, height: SIZE }).png().toBuffer();
+    let recortado;
+    try { recortado = await sharp(bruto).trim({ threshold: 1 }).toBuffer(); } catch { continue; }
+    const alto = Math.round((SIZE - 2) * escala);
+    const p = await sharp(recortado).resize({ height: alto, fit: 'inside', kernel: 'nearest' }).png().toBuffer();
+    const m = await sharp(p).metadata();
+    const f = await sharp({ create: { width: SIZE, height: SIZE, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } })
+      .composite([{ input: p, left: Math.max(0, Math.round((SIZE - (m.width || SIZE)) / 2)),
+                    top: Math.max(0, SIZE - 1 - (m.height || alto)) }])
+      .png().toBuffer();
+    capas.push({ input: f, left: col * SIZE, top: fila * SIZE });
+  }
+  return sharp({ create: { width: SIZE * 3, height: SIZE * 4, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } })
+    .composite(capas).png().toBuffer();
+}
+
 // ── Generar y guardar ─────────────────────────────────────────
 fs.mkdirSync(OUT_DIR, { recursive: true });
 fs.mkdirSync(PREVIEW, { recursive: true });
 
-const names = Object.keys(CHARS);
+// Ahora el proyecto MEZCLA dibujo por código con sprites generados por IA, así
+// que regenerarlos todos a ciegas machacaría el arte de IA. Hay que nombrarlos.
+const pedidos = process.argv.slice(2).filter((a) => !a.startsWith('--'));
+const names = process.argv.includes('--todos') ? Object.keys(CHARS) : pedidos;
+if (!names.length) {
+  console.error('Indica qué personajes redibujar, o --todos para los nueve.');
+  console.error(`  Disponibles: ${Object.keys(CHARS).join(', ')}`);
+  console.error('  Ojo: --todos machaca los sprites generados con IA.');
+  process.exit(1);
+}
+const desconocido = names.find((n) => !CHARS[n]);
+if (desconocido) { console.error(`Personaje desconocido: ${desconocido}`); process.exit(1); }
 const sheets = {};
 for (const name of names) {
   const c = buildSheet(name, CHARS[name]);
-  fs.writeFileSync(path.join(OUT_DIR, `${name}.png`), c.png());
+  const png = ESCALA[name] ? await reducir(c.png(), ESCALA[name]) : c.png();
+  fs.writeFileSync(path.join(OUT_DIR, `${name}.png`), png);
   sheets[name] = c;
-  console.log(`✔ ${name}.png`);
+  console.log(`✔ ${name}.png${ESCALA[name] ? ` (al ${Math.round(ESCALA[name] * 100)}%)` : ''}`);
 }
 
 // Contact sheet ampliado (x3) para inspección visual
 const SCALE = 3, cols = 3;
 const rows = Math.ceil(names.length / cols);
-const cw = 96 * SCALE, ch = 128 * SCALE;
+const HW = SIZE * 3, HH = SIZE * 4;             // tamaño real de cada hoja
+ const cw = HW * SCALE, ch = HH * SCALE;
 const contact = new Canvas(cw * cols, ch * rows);
 names.forEach((name, i) => {
   const src = sheets[name].buf;
   const ox = (i % cols) * cw, oy = Math.floor(i / cols) * ch;
-  for (let y = 0; y < 128; y++) for (let x = 0; x < 96; x++) {
-    const si = (y * 96 + x) * 4;
+  for (let y = 0; y < HH; y++) for (let x = 0; x < HW; x++) {
+    const si = (y * HW + x) * 4;
     const col = [src[si], src[si + 1], src[si + 2], src[si + 3]];
     for (let dy = 0; dy < SCALE; dy++) for (let dx = 0; dx < SCALE; dx++) {
       contact.set(ox + x * SCALE + dx, oy + y * SCALE + dy, col);
