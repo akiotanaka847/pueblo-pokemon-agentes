@@ -69,13 +69,26 @@ function prompt(desc) {
 
 const MODELO_GOOGLE = process.env.GOOGLE_IMAGE_MODEL || 'gemini-3-pro-image';
 
+// Imagen de referencia opcional (--ref=ruta.png). El modelo la usa como guía de
+// estilo, que es mucho más fiable que describir el estilo con palabras.
+const REF = process.argv.find((a) => a.startsWith('--ref='))?.split('=')[1];
+
 async function generarGoogle(desc) {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODELO_GOOGLE}:generateContent?key=${KEY_GOOGLE}`;
+  const entrada = [];
+  if (REF) {
+    entrada.push({ inline_data: { mime_type: 'image/png', data: fs.readFileSync(REF).toString('base64') } });
+    entrada.push({ text:
+      'The image above is the reference: keep exactly its art style, colours, outline weight and pixel size. ' +
+      prompt(desc) });
+  } else {
+    entrada.push({ text: prompt(desc) });
+  }
   const r = await fetch(url, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt(desc) }] }],
+      contents: [{ parts: entrada }],
       generationConfig: { responseModalities: ['IMAGE'] },
     }),
   });
@@ -116,39 +129,62 @@ async function limpiarFondo(buf) {
   if (hayAlfa) {
     for (let i = 3; i < data.length; i += 4) data[i] = data[i] < 200 ? 0 : 255;
   } else {
-    const TOL = 120 * 120;   // distancia al cuadrado; generosa porque el modelo tiñe los bordes
+    const TOL = 130 * 130;   // distancia al cuadrado
     for (let i = 0; i < data.length; i += 4) {
-      const dr = data[i] - MAGENTA.r, dg = data[i + 1] - MAGENTA.g, db = data[i + 2] - MAGENTA.b;
-      data[i + 3] = (dr * dr + dg * dg + db * db) < TOL ? 0 : 255;
+      const r = data[i], g = data[i + 1], b = data[i + 2];
+      const dr = r - MAGENTA.r, dg = g - MAGENTA.g, db = b - MAGENTA.b;
+      const cerca = (dr * dr + dg * dg + db * db) < TOL;
+      // El borde antialiasado tira a magenta sin llegar a serlo: rojo y azul
+      // dominan sobre el verde. Sin esta regla queda un fleco rosa alrededor.
+      // Basta con que rojo y azul superen claramente al verde: en esta paleta
+      // (amarillos, rojo, marrón, negro) ningún color propio cumple eso.
+      const fleco = r > 110 && b > 110 && g < Math.min(r, b) * 0.85;
+      data[i + 3] = (cerca || fleco) ? 0 : 255;
+      // El contorno negro se tiñe de magenta y queda morado oscuro. No lo caza
+      // la regla anterior (es oscuro y legítimo), así que se devuelve a negro.
+      if (data[i + 3] && Math.max(r, g, b) < 130 && b > g + 14 && r > g + 14) {
+        data[i] = 26; data[i + 1] = 24; data[i + 2] = 28;
+      }
     }
   }
   return sharp(data, { raw: { width: info.width, height: info.height, channels: 4 } }).png().toBuffer();
 }
 
-// Localiza cada vista contando pixeles opacos por columna y buscando los huecos
-// vacíos que las separan. Así da igual cuántas dibuje el modelo ni cómo las reparta.
+// Localiza cada vista buscando los huecos vacíos que las separan. Se hace en
+// DOS pasadas —primero bandas por filas, luego columnas dentro de cada banda—
+// porque el modelo reparte las vistas como quiere: en línea, en dos filas o en
+// rejilla. Proyectando solo columnas, dos filas se solapan y salen como una.
+function tramos(ocupada, hueco) {
+  const out = [];
+  let ini = -1, vacias = 0;
+  for (let i = 0; i < ocupada.length; i++) {
+    if (ocupada[i] > 0) { if (ini < 0) ini = i; vacias = 0; }
+    else if (ini >= 0 && ++vacias >= hueco) { out.push([ini, i - vacias]); ini = -1; vacias = 0; }
+  }
+  if (ini >= 0) out.push([ini, ocupada.length - 1]);
+  return out;
+}
+
 async function detectarVistas(buf) {
   const { data, info } = await sharp(buf).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
   const { width, height } = info;
-  const ocupada = new Array(width).fill(0);
-  for (let y = 0; y < height; y++)
-    for (let x = 0; x < width; x++)
-      if (data[(y * width + x) * 4 + 3] > 0) ocupada[x]++;
+  const opaco = (x, y) => data[(y * width + x) * 4 + 3] > 0;
 
-  const HUECO = Math.max(8, Math.round(width * 0.02));   // separación mínima entre vistas
-  const bloques = [];
-  let ini = -1, vacias = 0;
-  for (let x = 0; x < width; x++) {
-    if (ocupada[x] > 0) { if (ini < 0) ini = x; vacias = 0; }
-    else if (ini >= 0 && ++vacias >= HUECO) { bloques.push([ini, x - vacias]); ini = -1; vacias = 0; }
+  const porFila = new Array(height).fill(0);
+  for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) if (opaco(x, y)) porFila[y]++;
+
+  const cajas = [];
+  for (const [y0, y1] of tramos(porFila, Math.max(6, Math.round(height * 0.012)))) {
+    const porCol = new Array(width).fill(0);
+    for (let y = y0; y <= y1; y++) for (let x = 0; x < width; x++) if (opaco(x, y)) porCol[x]++;
+    for (const [x0, x1] of tramos(porCol, Math.max(4, Math.round(width * 0.008))))
+      cajas.push({ left: x0, top: y0, width: x1 - x0 + 1, height: y1 - y0 + 1 });
   }
-  if (ini >= 0) bloques.push([ini, width - 1]);
-  if (!bloques.length) return [];
+  if (!cajas.length) return [];
 
-  // Descarta manchas sueltas: solo cuentan los bloques de anchura comparable al mayor.
-  const mayor = Math.max(...bloques.map(([a, b]) => b - a));
-  return bloques.filter(([a, b]) => b - a > mayor * 0.35)
-                .map(([a, b]) => ({ left: a, width: b - a + 1, height }));
+  // Descarta manchas sueltas: solo cuentan las de tamaño comparable a la mayor.
+  const mayor = Math.max(...cajas.map((c) => c.width * c.height));
+  return cajas.filter((c) => c.width * c.height > mayor * 0.12);
 }
 
 // Encaja una vista en el fotograma: la recorta, la escala al alto del sprite y
@@ -156,8 +192,10 @@ async function detectarVistas(buf) {
 async function encajar(bufer, bajar = 0, escala = 1) {
   const recortado = await sharp(bufer).trim({ threshold: 1 }).toBuffer();
   const alto = Math.round((SIZE - 2) * escala) - bajar;
+  // Se limitan las DOS dimensiones: escalando solo por altura, una vista más
+  // ancha que alta (el perfil con la cola) se sale del fotograma.
   const personaje = await sharp(recortado)
-    .resize({ height: alto, fit: 'inside', kernel: 'nearest' })
+    .resize({ width: SIZE, height: alto, fit: 'inside', kernel: 'nearest' })
     .toBuffer();
   const m = await sharp(personaje).metadata();
   // Se ancla por los PIES: así un personaje más bajo se apoya en el suelo en vez
@@ -178,7 +216,7 @@ async function hoja(clave) {
 
   // Con --rehacer se reaprovecha la hoja ya descargada: así se puede afinar el
   // recorte todas las veces que haga falta sin volver a pagar la generación.
-  const guardada = path.join(CRUDO, `${clave}-hoja${MOTOR === 'google' ? '-google' : ''}.png`);
+  const guardada = path.join(CRUDO, `${clave}-hoja${MOTOR === 'google' ? '-google' : ''}${REF ? '-ref' : ''}.png`);
   const reusar = process.argv.includes('--rehacer') && fs.existsSync(guardada);
   process.stdout.write(`   ${clave} · ${reusar ? 'reprocesando…' : 'generando…'} `);
   const crudo = reusar ? fs.readFileSync(guardada) : await generar(desc);
@@ -194,7 +232,7 @@ async function hoja(clave) {
   // del paso). El pueblo usa la columna 1 quieto y cicla 0-1-2 al caminar.
   const trozos = [];
   for (const v of vistas) {
-    const t = await sharp(limpio).extract({ left: v.left, top: 0, width: v.width, height: v.height }).toBuffer();
+    const t = await sharp(limpio).extract({ left: v.left, top: v.top, width: v.width, height: v.height }).toBuffer();
     const esc = ALTURA[clave] ?? 1;
     trozos.push({ quieto: await encajar(t, 0, esc), paso: await encajar(t, 1, esc) });
   }
