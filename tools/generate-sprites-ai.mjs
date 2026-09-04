@@ -209,6 +209,54 @@ async function encajar(bufer, bajar = 0, escala = 1) {
     .png().toBuffer();
 }
 
+// Al reducir de ~250 px a 29, el brillo del ojo cae en un sitio distinto en
+// cada ojo: en uno se pierde y queda un bloque limpio, y en el otro cae en el
+// centro y deja el negro en forma de CRUZ. Se buscan las manchas oscuras
+// pequeñas y aisladas —los ojos— y se rellenan hasta su caja, que las vuelve
+// bloques sólidos. El contorno del cuerpo es una mancha enorme y no se toca.
+async function solidificarOjos(png) {
+  const { data, info } = await sharp(png).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  const { width, height } = info;
+  const oscuro = (x, y) => {
+    const i = (y * width + x) * 4;
+    return data[i + 3] > 0 && (0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]) < 80;
+  };
+
+  const visto = new Uint8Array(width * height);
+  const salida = Buffer.from(data);
+  for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+    if (visto[y * width + x] || !oscuro(x, y)) continue;
+    // Recorre la mancha conectada a la que pertenece este pixel
+    const pila = [[x, y]], mancha = [];
+    visto[y * width + x] = 1;
+    let x0 = x, x1 = x, y0 = y, y1 = y;
+    while (pila.length) {
+      const [cx, cy] = pila.pop();
+      mancha.push([cx, cy]);
+      x0 = Math.min(x0, cx); x1 = Math.max(x1, cx);
+      y0 = Math.min(y0, cy); y1 = Math.max(y1, cy);
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = cx + dx, ny = cy + dy;
+        if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
+        if (visto[ny * width + nx] || !oscuro(nx, ny)) continue;
+        visto[ny * width + nx] = 1;
+        pila.push([nx, ny]);
+      }
+    }
+    // Solo manchas del tamaño de un ojo: ni motas sueltas ni el contorno entero
+    const ancho = x1 - x0 + 1, alto = y1 - y0 + 1;
+    if (mancha.length < 4 || mancha.length > 12 || ancho > 4 || alto > 4) continue;
+    const [rx, ry] = mancha[0];
+    const ref = (ry * width + rx) * 4;
+    for (let fy = y0; fy <= y1; fy++) for (let fx = x0; fx <= x1; fx++) {
+      const i = (fy * width + fx) * 4;
+      salida[i] = data[ref]; salida[i + 1] = data[ref + 1];
+      salida[i + 2] = data[ref + 2]; salida[i + 3] = 255;
+    }
+  }
+  return sharp(salida, { raw: { width, height, channels: 4 } }).png().toBuffer();
+}
+
 async function hoja(clave) {
   const desc = PERSONAJES[clave];
   if (!desc) throw new Error(`Personaje desconocido: ${clave}`);
@@ -251,8 +299,9 @@ async function hoja(clave) {
       capas.push({ input: img, left: col * SIZE, top: fila * SIZE }));
   });
 
-  const png = await sharp({ create: { width: SIZE * 3, height: SIZE * 4, channels: 4,
+  const bruto = await sharp({ create: { width: SIZE * 3, height: SIZE * 4, channels: 4,
       background: { r: 0, g: 0, b: 0, alpha: 0 } } }).composite(capas).png().toBuffer();
+  const png = await solidificarOjos(bruto);
   fs.writeFileSync(path.join(OUT, `${clave}.png`), png);
   console.log(`   ✔ ${clave}.png (${SIZE * 3}x${SIZE * 4})`);
 }
