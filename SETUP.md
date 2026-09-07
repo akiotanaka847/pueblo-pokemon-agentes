@@ -177,6 +177,26 @@ derecho y monta la rejilla de 48x48.
   para que no midan lo mismo que un adulto. Los sprites se anclan por los **pies**,
   así los bajitos se apoyan en el suelo en vez de quedar flotando.
 
+## 🎭 Biblioteca de personajes
+
+Hay 17 aspectos para elegir al crear un agente. El selector es una rejilla con
+nombre y buscador, dentro del formulario de **Equipo → nuevo agente**.
+
+| Grupo | Personajes |
+|---|---|
+|Equipo original | Prof. Oak, Ash, Misty, Brock, Jessie, James, Entrenador |
+| Oficios | Enfermera, Oficial, Científica, Montañero, Psíquica, Rival |
+| Criaturas | Pikachu, Meowth, Salamandra, Tortuguita |
+
+**Para añadir más** no hace falta tocar el backend: `/api/sprites` lista los PNG
+de `public/assets/pokemon/`, así que cualquier archivo nuevo de 144x192 aparece
+solo en el selector. Para generarlo, añade su descripción a `PERSONAJES` en
+`tools/generate-sprites-ai.mjs` y ejecuta:
+
+```bash
+npm run sprites:ia -- mi-personaje --motor=google
+```
+
 ## 👥 Crear tus propios agentes
 
 Pestaña **👥 Equipo → "➕ Crear un agente nuevo"**: nombre, especialidad, personalidad

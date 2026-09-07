@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "pueblo",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "agents"],
+      "port": 4321
+    }
+  ]
+}

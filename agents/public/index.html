@@ -109,9 +109,22 @@
     background-size:102px 136px; background-position:-34px -3px;
     border:2px solid var(--line); }
   .member .who { font-weight:700; font-size:13px; }
-  .spick { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:8px; }
-  .spick .avatar { cursor:pointer; }
-  .spick .avatar.sel { border-color:var(--red); box-shadow:0 0 0 2px var(--red); }
+  /* Biblioteca de personajes: rejilla con nombre, para poder elegir de verdad */
+  .sbuscar { width:100%; box-sizing:border-box; margin-bottom:6px; padding:5px 8px;
+    border:2px solid var(--line); border-radius:8px; font:inherit; font-size:12px; }
+  .spick { display:grid; grid-template-columns:repeat(auto-fill,minmax(62px,1fr)); gap:6px;
+    max-height:232px; overflow-y:auto; margin-bottom:8px; padding:4px;
+    border:2px solid var(--line); border-radius:10px; background:#f4f7ef; }
+  .spick .sitem { cursor:pointer; text-align:center; padding:3px 1px 4px; border-radius:8px;
+    border:2px solid transparent; background:#fff; }
+  .spick .sitem:hover { border-color:var(--line); }
+  .spick .sitem.sel { border-color:var(--red); box-shadow:0 0 0 2px var(--red); }
+  /* La hoja es de 144x192 con fotogramas de 48: a 48 px se ve uno entero.
+     La columna 1 es la pose en reposo, la fila 0 la vista de frente. */
+  .spick .cara { width:48px; height:48px; margin:0 auto; image-rendering:pixelated;
+    background-repeat:no-repeat; background-size:144px 192px; background-position:-48px 0; }
+  .spick .snom { font-size:9.5px; line-height:1.15; color:var(--ink-soft); word-break:break-word; }
+  .spick .vacio { grid-column:1/-1; text-align:center; font-size:11px; color:var(--gray); padding:10px; }
   .newagent summary { cursor:pointer; font-weight:700; font-size:12.5px; color:var(--ink-soft);
     list-style:none; padding:4px 0; }
   .newagent summary::-webkit-details-marker { display:none; }
@@ -265,6 +278,7 @@
             <div class="muted" style="margin-bottom:4px">📎 Archivos de contexto (se adjuntan tras crearlo):</div>
             <input type="file" id="aFiles" multiple style="padding:6px;font-size:12px" />
             <div class="muted" style="margin-bottom:6px">Elige su aspecto:</div>
+            <input class="sbuscar" id="aBuscar" placeholder="Buscar personaje…" autocomplete="off">
             <div class="spick" id="aSprites"></div>
             <button class="small" id="aCreate">Añadir al equipo</button>
           </div>
@@ -443,13 +457,22 @@ async function createRoutine(){
 let spriteOpts = [], spriteSel = 'tu-entrenador';
 async function loadSpriteOptions(){
   try { spriteOpts = await getJSON('/api/sprites'); } catch(e) { spriteOpts = []; }
+  $('aBuscar')?.addEventListener('input', renderSpritePicker);
   renderSpritePicker();
 }
+const bonito = (sp) => sp.replace(/-/g,' ').replace(/^./, c => c.toUpperCase());
 function renderSpritePicker(){
-  $('aSprites').replaceChildren(...spriteOpts.map(sp =>
-    h('div',{ class:'avatar'+(sp===spriteSel?' sel':''), title:sp,
-      style:"background-image:url('/sprites/"+sp+".png')",
-      onclick:()=>{ spriteSel = sp; renderSpritePicker(); } })));
+  const q = ($('aBuscar')?.value || '').trim().toLowerCase();
+  const lista = q ? spriteOpts.filter(sp => sp.toLowerCase().includes(q)) : spriteOpts;
+  if(!lista.length){
+    $('aSprites').replaceChildren(h('div',{class:'vacio'},'Ningún personaje coincide'));
+    return;
+  }
+  $('aSprites').replaceChildren(...lista.map(sp =>
+    h('div',{ class:'sitem'+(sp===spriteSel?' sel':''), title:sp,
+        onclick:()=>{ spriteSel = sp; renderSpritePicker(); } },
+      h('div',{ class:'cara', style:"background-image:url('/sprites/"+sp+".png')" }),
+      h('div',{ class:'snom' }, bonito(sp)))));
 }
 const leerBase64 = (file) => new Promise((res, rej) => {
   const fr = new FileReader();

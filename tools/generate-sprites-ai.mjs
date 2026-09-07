@@ -34,7 +34,7 @@ const SIZE = 48;                                              // lado del fotogr
 
 // Altura relativa de cada personaje. Sin esto todos acaban midiendo lo mismo y
 // las criaturas quedan tan altas como el Profesor Oak.
-const ALTURA = { pikachu: 0.62, meowth: 0.68 };
+const ALTURA = { pikachu: 0.62, meowth: 0.68, salamandra: 0.66, tortuguita: 0.64 };
 
 // Descripciones ORIGINALES (no se nombran personajes con copyright)
 const PERSONAJES = {
@@ -47,6 +47,16 @@ const PERSONAJES = {
   pikachu: 'a small energetic cartoon mouse creature with bright yellow fur, large pointed ears, round rosy cheeks, big expressive dark eyes, a cheerful smile, slim limbs, a long thin tail, bare paws, no clothing and no shoes',
   meowth:  'a small cream-coloured cat creature with a shiny gold oval coin on its forehead, pointed ears, brown whiskers, curled tail, bare paws, no clothing and no shoes',
   'tu-entrenador': 'a friendly rookie trainer with a green cap, grey hoodie, dark trousers',
+
+  // ── Elenco ampliado ──
+  enfermera:  'a kind young nurse with long pink hair tied in two looped side buns, a white nurse dress with a red cross apron, white shoes',
+  oficial:    'a stern young police officer with short dark blue hair, a navy blue uniform with a white belt, knee-high black boots',
+  cientifica: 'a focused young female scientist with tied-back brown hair and round glasses, a long white lab coat over a teal blouse, dark trousers',
+  montanero:  'a cheerful stocky hiker with a bushy brown beard, an orange bandana, a green vest, brown shorts, heavy hiking boots and a big backpack',
+  psiquica:   'an elegant calm young woman with straight dark green hair, a deep red dress with gold trim, a purple cape, tall boots',
+  rival:      'a confident teenage boy with spiky reddish-brown hair, a black t-shirt under a purple jacket, dark blue jeans, white trainers',
+  salamandra: 'a small orange lizard creature standing on two legs, cream belly, tiny wings, big friendly eyes, a long tail with a flame at the tip',
+  tortuguita: 'a small light blue turtle creature standing on two legs, cream belly, a round brown shell with a cream rim, big cheerful eyes, a curled tail',
 };
 
 // El modelo dibuja 3 vistas; la cuarta (perfil derecho) se espeja de la izquierda,
@@ -165,6 +175,10 @@ function tramos(ocupada, hueco) {
   return out;
 }
 
+// Se sabe cuántas vistas se han pedido; esa información sirve para corregir
+// cuando dos salen pegadas.
+const ESPERADAS = 3;
+
 async function detectarVistas(buf) {
   const { data, info } = await sharp(buf).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
   const { width, height } = info;
@@ -184,7 +198,34 @@ async function detectarVistas(buf) {
 
   // Descarta manchas sueltas: solo cuentan las de tamaño comparable a la mayor.
   const mayor = Math.max(...cajas.map((c) => c.width * c.height));
-  return cajas.filter((c) => c.width * c.height > mayor * 0.12);
+  let vistas = cajas.filter((c) => c.width * c.height > mayor * 0.12);
+
+  // Si salen MENOS de las pedidas, dos vistas se han fundido: se parte la caja
+  // más ancha por su hueco interior mayor. Es más seguro que bajar el umbral
+  // global, que separaría también la llama de la cola de su propio personaje.
+  while (vistas.length < ESPERADAS) {
+    let iAncha = 0;
+    for (let i = 1; i < vistas.length; i++) if (vistas[i].width > vistas[iAncha].width) iAncha = i;
+    const c = vistas[iAncha];
+    const col = new Array(c.width).fill(0);
+    for (let y = c.top; y < c.top + c.height; y++)
+      for (let x = 0; x < c.width; x++) if (opaco(c.left + x, y)) col[x]++;
+
+    let mejor = null, ini = -1;
+    for (let x = 0; x <= c.width; x++) {
+      if (x < c.width && col[x] === 0) { if (ini < 0) ini = x; }
+      else if (ini > 0 && x < c.width) {                 // hueco interior, no de borde
+        if (!mejor || x - ini > mejor.ancho) mejor = { ini, fin: x, ancho: x - ini };
+        ini = -1;
+      } else ini = -1;
+    }
+    if (!mejor || mejor.ancho < 2) break;                // no hay por dónde partir
+    const corte = c.left + mejor.ini + Math.floor(mejor.ancho / 2);
+    vistas.splice(iAncha, 1,
+      { ...c, width: corte - c.left },
+      { ...c, left: corte, width: c.left + c.width - corte });
+  }
+  return vistas;
 }
 
 // Encaja una vista en el fotograma: la recorta, la escala al alto del sprite y
