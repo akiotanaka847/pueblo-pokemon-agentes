@@ -34,6 +34,14 @@ const C = {
   pot: [166, 100, 62], leaf: [72, 152, 84], leafHi: [104, 186, 112],
   rug: [186, 84, 94], rugEdge: [146, 62, 74],
   cab: [186, 190, 200], cabLine: [150, 155, 168],
+  // ── Interiores de casa y Centro Pokémon ──
+  wood: [198, 152, 96], woodD: [166, 122, 72], woodL: [216, 176, 122],
+  tileA: [238, 238, 242], tileB: [206, 216, 230],
+  cnt: [232, 96, 96], cntD: [186, 66, 70], cntTop: [246, 240, 226],
+  bed: [236, 240, 248], bedD: [198, 206, 222], quilt: [96, 150, 224], quiltD: [66, 112, 186],
+  mach: [228, 232, 240], machD: [170, 178, 194], led: [110, 226, 140], ledD: [64, 176, 96],
+  bookA: [200, 72, 66], bookB: [70, 130, 200], bookC: [222, 186, 72],
+  mat: [166, 122, 72], matD: [132, 94, 54],
   T: [0, 0, 0, 0],
 };
 
@@ -154,6 +162,89 @@ const tiles = {
       }
     }
   },
+  // ── Interiores ──
+  // Suelo de tarima: las juntas van desplazadas entre filas, si no se ve una
+  // rejilla en vez de tablas.
+  wood(p) {
+    for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) p(x, y, C.wood);
+    for (let y = 0; y < 32; y += 8) {
+      for (let x = 0; x < 32; x++) p(x, y, C.woodD);
+      const junta = (y % 16 === 0) ? 10 : 22;
+      for (let k = 0; k < 8; k++) p(junta, y + k, C.woodD);
+      for (let x = 0; x < 32; x++) p(x, y + 1, C.woodL);
+    }
+  },
+  tiles(p) {
+    for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) {
+      const a = (Math.floor(x / 16) + Math.floor(y / 16)) % 2;
+      p(x, y, a ? C.tileB : C.tileA);
+    }
+  },
+  // Mostrador de 2 casillas: la fila baja es la cara frontal, que es lo que le
+  // da volumen visto desde arriba.
+  cntL(p) {
+    for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) p(x, y, C.tileA);
+    for (let y = 6; y < 26; y++) for (let x = 4; x < 32; x++) p(x, y, C.cnt);
+    for (let x = 4; x < 32; x++) { p(x, 6, C.cntTop); p(x, 7, C.cntTop); }
+    for (let y = 22; y < 26; y++) for (let x = 4; x < 32; x++) p(x, y, C.cntD);
+  },
+  cntR(p) {
+    for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) p(x, y, C.tileA);
+    for (let y = 6; y < 26; y++) for (let x = 0; x < 28; x++) p(x, y, C.cnt);
+    for (let x = 0; x < 28; x++) { p(x, 6, C.cntTop); p(x, 7, C.cntTop); }
+    for (let y = 22; y < 26; y++) for (let x = 0; x < 28; x++) p(x, y, C.cntD);
+  },
+  healer(p) {
+    for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) p(x, y, C.tileA);
+    for (let y = 4; y < 28; y++) for (let x = 5; x < 27; x++) p(x, y, C.mach);
+    for (let y = 22; y < 28; y++) for (let x = 5; x < 27; x++) p(x, y, C.machD);
+    for (let x = 5; x < 27; x++) { p(x, 4, C.machD); p(x, 5, C.machD); }
+    for (const [cx, cy] of [[10, 12], [16, 12], [22, 12], [13, 18], [19, 18]])
+      for (let dy = 0; dy < 3; dy++) for (let dx = 0; dx < 3; dx++)
+        p(cx + dx, cy + dy, dy === 2 ? C.ledD : C.led);
+  },
+  // Cama de 2 casillas en vertical: arriba la almohada, abajo el edredón.
+  bedT(p) {
+    for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) p(x, y, C.wood);
+    for (let y = 2; y < 32; y++) for (let x = 4; x < 28; x++) p(x, y, C.bed);
+    for (let y = 2; y < 6; y++) for (let x = 4; x < 28; x++) p(x, y, C.bedD);
+    for (let y = 8; y < 18; y++) for (let x = 7; x < 25; x++) p(x, y, C.bed);
+    for (let x = 7; x < 25; x++) p(x, 17, C.bedD);
+  },
+  bedB(p) {
+    for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) p(x, y, C.wood);
+    for (let y = 0; y < 26; y++) for (let x = 4; x < 28; x++) p(x, y, C.quilt);
+    for (let x = 4; x < 28; x++) { p(x, 0, C.bed); p(x, 1, C.bed); }
+    for (let y = 22; y < 26; y++) for (let x = 4; x < 28; x++) p(x, y, C.quiltD);
+    for (let y = 6; y < 20; y += 6) for (let x = 6; x < 26; x++) p(x, y, C.quiltD);
+  },
+  books(p) {
+    for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) p(x, y, C.wood);
+    for (let y = 2; y < 30; y++) for (let x = 2; x < 30; x++) p(x, y, C.deskDark);
+    const lomos = [C.bookA, C.bookB, C.bookC];
+    for (let fila = 0; fila < 3; fila++) {
+      const y0 = 4 + fila * 9;
+      for (let x = 4; x < 28; x += 3)
+        for (let dy = 0; dy < 7; dy++) for (let dx = 0; dx < 2; dx++)
+          p(x + dx, y0 + dy, lomos[(x + fila) % 3]);
+      for (let x = 2; x < 30; x++) p(x, y0 + 7, C.desk);
+    }
+  },
+  // Felpudo de salida: marca dónde se sale sin necesidad de explicarlo.
+  mat(p) {
+    for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) p(x, y, C.wood);
+    for (let y = 8; y < 26; y++) for (let x = 4; x < 28; x++) p(x, y, C.mat);
+    for (let x = 4; x < 28; x++) { p(x, 8, C.matD); p(x, 25, C.matD); }
+    for (let y = 8; y < 26; y++) { p(4, y, C.matD); p(27, y, C.matD); }
+    for (let y = 12; y < 22; y += 4) for (let x = 8; x < 24; x += 3) p(x, y, C.matD);
+  },
+  tableI(p) {
+    for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) p(x, y, C.wood);
+    for (let y = 6; y < 24; y++) for (let x = 4; x < 28; x++) p(x, y, C.desk);
+    for (let x = 4; x < 28; x++) { p(x, 6, C.deskHi); p(x, 7, C.deskHi); }
+    for (let y = 20; y < 24; y++) for (let x = 4; x < 28; x++) p(x, y, C.deskDark);
+    for (let y = 24; y < 30; y++) { for (let d = 0; d < 3; d++) { p(7 + d, y, C.deskDark); p(22 + d, y, C.deskDark); } }
+  },
   cabinet(p) {
     tiles.floor(p);
     for (let y = 5; y <= 28; y++) for (let x = 4; x <= 27; x++) p(x, y, C.cab);
@@ -164,7 +255,9 @@ const tiles = {
 };
 
 const ORDER = ['floor', 'wall', 'deskTL', 'chair', 'plant', 'rug', 'door', 'cabinet', 'deskTR',
-               'boardL', 'boardR', 'coffee', 'shelf', 'deskBL', 'deskBR'];
+               'boardL', 'boardR', 'coffee', 'shelf', 'deskBL', 'deskBR',
+               // ── Interiores ──
+               'wood', 'tiles', 'cntL', 'cntR', 'healer', 'bedT', 'bedB', 'books', 'mat', 'tableI'];
 const COLS = 8;
 const ROWS = Math.ceil(ORDER.length / COLS);   // varias filas si hacen falta
 const c = new Canvas(COLS * 32, ROWS * 32);
