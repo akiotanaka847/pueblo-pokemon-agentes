@@ -50,8 +50,8 @@ const PERSONAJES = {
 
   // ── Elenco ampliado ──
   enfermera:  'a kind young nurse with long pink hair tied in two looped side buns, a white nurse dress with a red cross apron, white shoes',
-  oficial:    'a stern young police officer with short dark blue hair, a navy blue uniform with a white belt, knee-high black boots',
-  cientifica: 'a focused young female scientist with tied-back brown hair and round glasses, a long white lab coat over a teal blouse, dark trousers',
+  oficial:    'a young police officer with short dark blue hair, a navy blue uniform jacket with a white belt and gold buttons, navy trousers, black boots; calm friendly face with clearly drawn dark eyes and a small smile',
+  cientifica: 'a young woman scientist with long dark brown hair tied in a ponytail, round glasses, a long white lab coat open over a teal blouse and a knee-length skirt, dark tights, flat shoes; clearly feminine silhouette',
   montanero:  'a cheerful stocky hiker with a bushy brown beard, an orange bandana, a green vest, brown shorts, heavy hiking boots and a big backpack',
   psiquica:   'an elegant calm young woman with straight dark green hair, a deep red dress with gold trim, a purple cape, tall boots',
   rival:      'a confident teenage boy with spiky reddish-brown hair, a black t-shirt under a purple jacket, dark blue jeans, white trainers',
