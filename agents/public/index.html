@@ -777,7 +777,10 @@ const SPR_DX=16-SPR_DRAW/2;            // centrado horizontal sobre la baldosa
 const SPR_DY=30-46*SPR_K;              // anclado por los pies
 const OFF={floor:0,wall:1,deskTL:2,chair:3,plant:4,rug:5,door:6,cabinet:7,deskTR:8,
            boardL:9,boardR:10,coffee:11,shelf:12,deskBL:13,deskBR:14};
-const TOWN={grass:0,grass2:1,tallgrass:2,path:3,water:4,flowerR:5,flowerY:6,tree:7};
+const TOWN={grass:0,grass2:1,tallgrass:2,path:3,water:4,flowerR:5,flowerY:6,tree:7,
+            fence:8,sign:9, roofRL:10,roofRM:11,roofRR:12, roofBL:13,roofBM:14,roofBR:15,
+            roofGL:16,roofGM:17,roofGR:18, wall:19,door:20,window:21,
+            roofPCL:22,roofPCM:23,roofPCC:24,roofPCR:25, glassdoor:26};
 const DIRROW={down:0,left:1,right:2,up:3};
 const DESKS=[[1,2],[4,2],[7,2],[10,2],[1,8],[4,8],[7,8],[10,8]];
 const AGENT_KEYS=Object.keys(CHARS).filter(k=>!['user','system'].includes(k));
@@ -865,12 +868,60 @@ async function initTown(){
   T(oTs,OFF.shelf,0,4); T(oTs,OFF.shelf,0,5);        // estantería
   T(oTs,OFF.plant,0,8);
   for(let y=0;y<ROWS;y++) T(oTs,(y===6||y===7)?OFF.door:OFF.wall,OFFICE_W,y);
+  // ── Hierba con textura ──
+  // Mezcla determinista (sin Math.random) para que el pueblo se vea igual en
+  // cada recarga: dos hash distintos evitan que los grupos formen diagonales.
   for(let x=OFFICE_W+1;x<COLS;x++) for(let y=0;y<ROWS;y++){
-    const hh=(x*7+y*13)%11; T(tTs, hh<1?TOWN.flowerY : hh<2?TOWN.grass2 : TOWN.grass, x, y);
+    const a=(x*7+y*13)%17, b=(x*29+y*11)%23;
+    T(tTs, a<1?TOWN.flowerY : a<2?TOWN.flowerR : b<3?TOWN.tallgrass : b<7?TOWN.grass2 : TOWN.grass, x, y);
   }
+
+  // ── Caminos ──
+  // Salen de la puerta de la oficina y llevan a cada edificio: sin ellos, las
+  // casas parecen soltadas sobre la hierba.
+  // El camino se corta antes del estanque: cruzándolo entero, se fundía con la
+  // orilla y el cuadrante inferior quedaba en una sola mancha de arena.
+  for(let x=OFFICE_W+1;x<=20;x++) T(tTs,TOWN.path,x,7);
   for(let y=5;y<=8;y++) T(tTs,TOWN.path,OFFICE_W+1,y);
-  for(let x=21;x<=24;x++) for(let y=9;y<=12;y++){ T(tTs,TOWN.water,x,y); bloquear(x,y); }
-  for(const [tx,ty] of [[15,1],[18,2],[24,1],[16,12],[19,6],[25,8]]){ T(tTs,TOWN.tree,tx,ty); bloquear(tx,ty); }
+  for(let y=3;y<=7;y++){ T(tTs,TOWN.path,17,y); T(tTs,TOWN.path,22,y); }
+
+  // ── Centro Pokémon (tejado con cruz roja) y casa ──
+  const edificio = (x0,y0,tejado,puerta) => {
+    tejado.forEach((t,i)=>{ T(tTs,t,x0+i,y0); bloquear(x0+i,y0); });
+    tejado.forEach((_,i)=>{
+      const t = i===puerta ? (tejado.length===4?TOWN.glassdoor:TOWN.door)
+                           : (i===puerta+1 ? TOWN.window : TOWN.wall);
+      T(tTs,t,x0+i,y0+1);
+      bloquear(x0+i,y0+1);   // también la puerta: no hay interior, y un agente
+                             // plantado en el umbral parece un fallo de dibujo
+    });
+  };
+  edificio(15,1,[TOWN.roofPCL,TOWN.roofPCM,TOWN.roofPCC,TOWN.roofPCR],2);   // x=17 es la puerta
+  edificio(21,1,[TOWN.roofRL,TOWN.roofRM,TOWN.roofRR],1);                   // x=22 es la puerta
+
+  // ── Estanque con orilla de arena ──
+  // El agua sola, cortada a cuchillo sobre la hierba, no parece agua: la arena
+  // hace de transición.
+  // El estanque llega al borde del mapa, como si siguiera fuera: así hace falta
+  // orilla solo en los dos lados a la vista, y no un cerco de playa alrededor
+  // de un charco.
+  for(let x=20;x<=25;x++) T(tTs,TOWN.path,x,9);
+  for(let y=9;y<=13;y++) T(tTs,TOWN.path,20,y);
+  for(let x=21;x<=25;x++) for(let y=10;y<=13;y++){ T(tTs,TOWN.water,x,y); bloquear(x,y); }
+
+  // ── Valla del huerto, cartel y arbolado ──
+  // Huerto vallado por tres lados y abierto por arriba. Cerrado del todo, su
+  // interior seria transitable pero inalcanzable, y un agente que lo eligiera
+  // como destino se quedaria raspando la valla sin llegar nunca.
+  for(let x=14;x<=17;x++){ T(tTs,TOWN.fence,x,12); bloquear(x,12); }
+  for(let y=10;y<=11;y++){ T(tTs,TOWN.fence,14,y); bloquear(14,y);
+                           T(tTs,TOWN.fence,17,y); bloquear(17,y); }
+  for(let x=15;x<=16;x++) for(let y=10;y<=11;y++)
+    T(tTs,((x+y)%2)?TOWN.tallgrass:TOWN.flowerR,x,y);
+  T(tTs,TOWN.sign,OFFICE_W+2,8); bloquear(OFFICE_W+2,8);
+  for(const [tx,ty] of [[14,0],[19,0],[25,0],[14,4],[19,4],[24,4],[19,9],[25,6],[16,6],[24,7],[14,2]]){
+    T(tTs,TOWN.tree,tx,ty); bloquear(tx,ty);
+  }
   resizeTown();
   requestAnimationFrame(tick);
 }
@@ -994,7 +1045,13 @@ function tick(ts){
       // Si ya está DENTRO de una casilla bloqueada, se le deja salir: con las
       // colisiones activas los dos ejes le fallarían y quedaría encerrado.
       const atrapado = !pisable(ac.x, ac.y);
-      const okX = atrapado || pisable(nx, ac.y), okY = atrapado || pisable(ac.x, ny);
+      let okX = atrapado || pisable(nx, ac.y), okY = atrapado || pisable(ac.x, ny);
+      // Corte de esquina: cada eje por separado puede estar libre y el destino
+      // en diagonal estar bloqueado. Sin esta comprobación el personaje se cuela
+      // por la esquina de la casilla.
+      if(okX && okY && !atrapado && !pisable(nx, ny)){
+        if(Math.abs(ddx) >= Math.abs(ddy)) okY = false; else okX = false;
+      }
       if(okX) ac.x=nx;
       if(okY) ac.y=ny;
       if(!okX && !okY){ const p=randPark(); ac.tx=p.x; ac.ty=p.y; }   // atascado: otro destino
