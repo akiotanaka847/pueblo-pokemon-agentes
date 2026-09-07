@@ -124,6 +124,8 @@
   .spick .cara { width:48px; height:48px; margin:0 auto; image-rendering:pixelated;
     background-repeat:no-repeat; background-size:144px 192px; background-position:-48px 0; }
   .spick .snom { font-size:9.5px; line-height:1.15; color:var(--ink-soft); word-break:break-word; }
+  .spick .sgrupo { grid-column:1/-1; font-size:10px; font-weight:700; letter-spacing:.4px;
+    text-transform:uppercase; color:var(--gray); padding:4px 2px 1px; }
   .spick .vacio { grid-column:1/-1; text-align:center; font-size:11px; color:var(--gray); padding:10px; }
   .newagent summary { cursor:pointer; font-weight:700; font-size:12.5px; color:var(--ink-soft);
     list-style:none; padding:4px 0; }
@@ -454,25 +456,45 @@ async function createRoutine(){
     scheduleType:$('rType').value, everyMinutes:Number($('rEvery').value)||60, at:$('rAt').value||'09:00' });
   $('rTitle').value=''; $('rDesc').value=''; await refresh();
 }
-let spriteOpts = [], spriteSel = 'tu-entrenador';
+let spriteOpts = [], spriteInfo = [], spriteSel = 'tu-entrenador';
 async function loadSpriteOptions(){
-  try { spriteOpts = await getJSON('/api/sprites'); } catch(e) { spriteOpts = []; }
+  try {
+    const raw = await getJSON('/api/sprites');
+    // Compatibilidad: antes era una lista de nombres, ahora {name,tipo}
+    spriteInfo = raw.map(x => typeof x === 'string' ? { name:x, tipo:'persona' } : x);
+    spriteOpts = spriteInfo.map(x => x.name);
+  } catch(e) { spriteInfo = []; spriteOpts = []; }
   $('aBuscar')?.addEventListener('input', renderSpritePicker);
   renderSpritePicker();
 }
 const bonito = (sp) => sp.replace(/-/g,' ').replace(/^./, c => c.toUpperCase());
-function renderSpritePicker(){
-  const q = ($('aBuscar')?.value || '').trim().toLowerCase();
-  const lista = q ? spriteOpts.filter(sp => sp.toLowerCase().includes(q)) : spriteOpts;
-  if(!lista.length){
-    $('aSprites').replaceChildren(h('div',{class:'vacio'},'Ningún personaje coincide'));
+
+// Rejilla agrupada por tipo. La usan el formulario de alta y la ficha de cada
+// agente, así el aspecto se elige igual en los dos sitios.
+function pintarRejilla(destino, elegido, filtro, alElegir){
+  const q = (filtro||'').trim().toLowerCase();
+  const hay = spriteInfo.filter(x => !q || x.name.toLowerCase().includes(q));
+  if(!hay.length){
+    destino.replaceChildren(h('div',{class:'vacio'},'Ningún personaje coincide'));
     return;
   }
-  $('aSprites').replaceChildren(...lista.map(sp =>
-    h('div',{ class:'sitem'+(sp===spriteSel?' sel':''), title:sp,
-        onclick:()=>{ spriteSel = sp; renderSpritePicker(); } },
-      h('div',{ class:'cara', style:"background-image:url('/sprites/"+sp+".png')" }),
-      h('div',{ class:'snom' }, bonito(sp)))));
+  const ficha = (x) => h('div',{ class:'sitem'+(x.name===elegido?' sel':''), title:x.name,
+      onclick:()=>alElegir(x.name) },
+    h('div',{ class:'cara', style:"background-image:url('/sprites/"+x.name+".png')" }),
+    h('div',{ class:'snom' }, bonito(x.name)));
+  const hijos = [];
+  for(const [tipo,etiqueta] of [['persona','Entrenadores'],['criatura','Criaturas']]){
+    const grupo = hay.filter(x => x.tipo === tipo);
+    if(!grupo.length) continue;
+    hijos.push(h('div',{class:'sgrupo'}, etiqueta+' · '+grupo.length));
+    hijos.push(...grupo.map(ficha));
+  }
+  destino.replaceChildren(...hijos);
+}
+
+function renderSpritePicker(){
+  pintarRejilla($('aSprites'), spriteSel, $('aBuscar')?.value,
+    (sp)=>{ spriteSel = sp; renderSpritePicker(); });
 }
 const leerBase64 = (file) => new Promise((res, rej) => {
   const fr = new FileReader();
@@ -614,19 +636,15 @@ function selectAgent(key){ selectedAgent = key; renderProfile(); }
 const aspectoSel = {};        // clave -> aspecto elegido pero aún sin guardar
 function panelAspecto(a){
   const rejilla = h('div',{class:'spick'});
-  const pinta = () => {
-    const elegido = aspectoSel[a.key] ?? (a.sprite || a.key);
-    rejilla.replaceChildren(...spriteOpts.map(sp =>
-      h('div',{ class:'sitem'+(sp===elegido?' sel':''), title:sp,
-          onclick:()=>{ aspectoSel[a.key]=sp; pinta(); } },
-        h('div',{class:'cara', style:"background-image:url('/sprites/"+sp+".png')"}),
-        h('div',{class:'snom'}, bonito(sp)))));
-  };
+  const buscador = h('input',{class:'sbuscar', placeholder:'Buscar personaje…', autocomplete:'off'});
+  const pinta = () => pintarRejilla(rejilla, aspectoSel[a.key] ?? (a.sprite || a.key),
+    buscador.value, (sp)=>{ aspectoSel[a.key]=sp; pinta(); });
+  buscador.addEventListener('input', pinta);
   pinta();
   return h('details',{class:'cfg'},
     h('summary',{},'🎭 Cambiar aspecto'),
     h('div',{style:'margin-top:8px'},
-      rejilla,
+      buscador, rejilla,
       h('button',{class:'small', onclick:()=>guardarAspecto(a.key)},'💾 Guardar aspecto')));
 }
 async function guardarAspecto(key){

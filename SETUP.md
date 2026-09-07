@@ -179,14 +179,17 @@ derecho y monta la rejilla de 48x48.
 
 ## 🎭 Biblioteca de personajes
 
-Hay 17 aspectos para elegir al crear un agente. El selector es una rejilla con
-nombre y buscador, dentro del formulario de **Equipo → nuevo agente**.
+Hay 27 aspectos. El selector es una rejilla con nombre, buscador y separación
+por tipo — aparece en **Equipo → nuevo agente** y en la ficha de cada agente.
 
 | Grupo | Personajes |
 |---|---|
-|Equipo original | Prof. Oak, Ash, Misty, Brock, Jessie, James, Entrenador |
-| Oficios | Enfermera, Oficial, Científica, Montañero, Psíquica, Rival |
-| Criaturas | Pikachu, Meowth, Salamandra, Tortuguita |
+| Entrenadores (13) | Prof. Oak, Ash, Misty, Brock, Jessie, James, Entrenador, Enfermera, Oficial, Científica, Montañero, Psíquica, Rival |
+| Criaturas (14) | Pikachu, Meowth, Salamandra, Tortuguita, Plantita, Pajarito, Gusanito, Murcielaguito, Fantasmita, Roquita, Zorrito, Peludito, Serpentina, Medusita |
+
+**Persona o criatura se deduce midiendo el sprite**, no de una lista aparte: las
+personas ocupan los 46 px del fotograma y ninguna criatura pasa de 32. Así,
+añadir un PNG nuevo sigue bastando para que aparezca ya clasificado.
 
 **Cambiar el aspecto cuando quieras**: haz clic en un personaje del pueblo y
 abre **🎭 Cambiar aspecto** en su ficha. Funciona con cualquiera, también con

@@ -2,6 +2,7 @@
 import express from 'express';
 import path from 'node:path';
 import fs from 'node:fs';
+import sharp from 'sharp';
 import { fileURLToPath } from 'node:url';
 import { cx, bus } from './store';
 import { getRoster } from './roster';
@@ -169,11 +170,38 @@ export function startServer() {
   });
 
   // Sprites disponibles para elegir el aspecto de un agente nuevo.
-  app.get('/api/sprites', (_req, res) => {
+  // Persona o criatura se deduce MIDIENDO el sprite, no de una lista aparte:
+  // las personas ocupan los 46 px del fotograma y ninguna criatura pasa de 32.
+  // Así, añadir un PNG nuevo sigue bastando para que aparezca clasificado.
+  const tipoCache = new Map<string, { mtime: number; tipo: string }>();
+  async function tipoDeSprite(archivo: string, nombre: string) {
+    const mtime = fs.statSync(archivo).mtimeMs;
+    const previo = tipoCache.get(nombre);
+    if (previo && previo.mtime === mtime) return previo.tipo;
+    let tipo = 'persona';
+    try {
+      const { data, info } = await sharp(archivo)
+        .extract({ left: 48, top: 0, width: 48, height: 48 })
+        .ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+      let arriba = -1, abajo = -1;
+      for (let y = 0; y < info.height; y++)
+        for (let x = 0; x < info.width; x++)
+          if (data[(y * info.width + x) * 4 + 3] > 0) { if (arriba < 0) arriba = y; abajo = y; }
+      if (abajo - arriba + 1 < 40) tipo = 'criatura';
+    } catch { /* si no se puede medir, se queda como persona */ }
+    tipoCache.set(nombre, { mtime, tipo });
+    return tipo;
+  }
+
+  app.get('/api/sprites', async (_req, res) => {
     const dir = path.join(__dirname, '..', 'public', 'assets', 'pokemon');
     try {
-      res.json(fs.readdirSync(dir).filter((f) => f.endsWith('.png') && !f.includes('tileset'))
-        .map((f) => f.replace('.png', '')).sort());
+      const nombres = fs.readdirSync(dir)
+        .filter((f) => f.endsWith('.png') && !f.includes('tileset'))
+        .map((f) => f.replace('.png', '')).sort();
+      res.json(await Promise.all(nombres.map(async (n) => ({
+        name: n, tipo: await tipoDeSprite(path.join(dir, n + '.png'), n),
+      }))));
     } catch { res.json([]); }
   });
 

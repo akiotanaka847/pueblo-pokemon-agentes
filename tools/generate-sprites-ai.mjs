@@ -34,7 +34,11 @@ const SIZE = 48;                                              // lado del fotogr
 
 // Altura relativa de cada personaje. Sin esto todos acaban midiendo lo mismo y
 // las criaturas quedan tan altas como el Profesor Oak.
-const ALTURA = { pikachu: 0.62, meowth: 0.68, salamandra: 0.66, tortuguita: 0.64 };
+const ALTURA = {
+  pikachu: 0.62, meowth: 0.68, salamandra: 0.66, tortuguita: 0.64,
+  plantita: 0.52, pajarito: 0.50, gusanito: 0.46, murcielaguito: 0.54, fantasmita: 0.58,
+  roquita: 0.56, zorrito: 0.56, peludito: 0.44, serpentina: 0.60, medusita: 0.54,
+};
 
 // Descripciones ORIGINALES (no se nombran personajes con copyright)
 const PERSONAJES = {
@@ -57,6 +61,18 @@ const PERSONAJES = {
   rival:      'a confident teenage boy with spiky reddish-brown hair, a black t-shirt under a purple jacket, dark blue jeans, white trainers',
   salamandra: 'a small orange lizard creature standing on two legs, cream belly, tiny wings, big friendly eyes, a long tail with a flame at the tip',
   tortuguita: 'a small light blue turtle creature standing on two legs, cream belly, a round brown shell with a cream rim, big cheerful eyes, a curled tail',
+
+  // ── Criaturas ──
+  plantita:   'a small round green creature on four stubby legs, darker green spots, a big pink flower bud on its back, wide friendly red eyes, pointed ears',
+  pajarito:   'a small plump bird creature with brown and cream feathers, a short orange beak, round black eyes, small wings held out, thin orange legs',
+  gusanito:   'a small green caterpillar creature with a segmented body, a pair of large round yellow eyes, tiny stubby feet, a short red antenna on its head',
+  murcielaguito: 'a small round purple bat creature with big pointed ears, wide open wings, a wide grinning mouth, no visible eyes, a short tail',
+  fantasmita: 'a small floating ghost creature made of dark purple smoke, a rounded body with a wispy tail instead of legs, wide white eyes and a mischievous grin',
+  roquita:    'a small grey boulder creature with two thick stubby arms, a craggy rocky surface, heavy brow, small determined eyes, no legs',
+  zorrito:    'a small orange fox creature on four legs, a cream chest, large pointed ears with dark tips, a big bushy tail, bright amber eyes',
+  peludito:   'a small round fluffy creature covered in cream fur, tiny black eyes, a small pink nose, two little rabbit-like ears, no visible legs',
+  serpentina: 'a small pale green snake creature coiled upright, a cream underbelly, a rattle at the tip of its tail, narrow yellow eyes, a forked tongue',
+  medusita:   'a small translucent blue jellyfish creature floating upright, a round dome body, two big dark eyes, four short trailing tentacles, red spots on the dome',
 };
 
 // El modelo dibuja 3 vistas; la cuarta (perfil derecho) se espeja de la izquierda,
