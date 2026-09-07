@@ -177,6 +177,40 @@ derecho y monta la rejilla de 48x48.
   para que no midan lo mismo que un adulto. Los sprites se anclan por los **pies**,
   así los bajitos se apoyan en el suelo en vez de quedar flotando.
 
+## 🎭 Biblioteca de personajes
+
+Hay 27 aspectos. El selector es una rejilla con nombre, buscador y separación
+por tipo — aparece en **Equipo → nuevo agente** y en la ficha de cada agente.
+
+| Grupo | Personajes |
+|---|---|
+| Entrenadores (13) | Prof. Oak, Ash, Misty, Brock, Jessie, James, Entrenador, Enfermera, Oficial, Científica, Montañero, Psíquica, Rival |
+| Criaturas (14) | Pikachu, Meowth, Salamandra, Tortuguita, Plantita, Pajarito, Gusanito, Murcielaguito, Fantasmita, Roquita, Zorrito, Peludito, Serpentina, Medusita |
+
+**Persona o criatura se deduce midiendo el sprite**, no de una lista aparte: las
+personas ocupan los 46 px del fotograma y ninguna criatura pasa de 32. Así,
+añadir un PNG nuevo sigue bastando para que aparezca ya clasificado.
+
+**Cambiar el aspecto cuando quieras**: haz clic en un personaje del pueblo y
+abre **🎭 Cambiar aspecto** en su ficha. Funciona con cualquiera, también con
+los de fábrica (Oak, Ash…). El cambio se guarda en `agents/db.json` y sobrevive
+a los reinicios.
+
+Por dentro son dos casos distintos: los agentes que creas tú guardan su aspecto
+en su propia ficha, mientras que los de fábrica se definen en `roster.ts`, que
+es código y no se edita en caliente. Para esos, el cambio se guarda como una
+**anulación** que se aplica al construir el elenco, así el código sigue siendo
+el valor por defecto y tus cambios viven aparte sin pisarlo.
+
+**Para añadir más** no hace falta tocar el backend: `/api/sprites` lista los PNG
+de `public/assets/pokemon/`, así que cualquier archivo nuevo de 144x192 aparece
+solo en el selector. Para generarlo, añade su descripción a `PERSONAJES` en
+`tools/generate-sprites-ai.mjs` y ejecuta:
+
+```bash
+npm run sprites:ia -- mi-personaje --motor=google
+```
+
 ## 👥 Crear tus propios agentes
 
 Pestaña **👥 Equipo → "➕ Crear un agente nuevo"**: nombre, especialidad, personalidad

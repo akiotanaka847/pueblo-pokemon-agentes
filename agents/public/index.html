@@ -109,9 +109,24 @@
     background-size:102px 136px; background-position:-34px -3px;
     border:2px solid var(--line); }
   .member .who { font-weight:700; font-size:13px; }
-  .spick { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:8px; }
-  .spick .avatar { cursor:pointer; }
-  .spick .avatar.sel { border-color:var(--red); box-shadow:0 0 0 2px var(--red); }
+  /* Biblioteca de personajes: rejilla con nombre, para poder elegir de verdad */
+  .sbuscar { width:100%; box-sizing:border-box; margin-bottom:6px; padding:5px 8px;
+    border:2px solid var(--line); border-radius:8px; font:inherit; font-size:12px; }
+  .spick { display:grid; grid-template-columns:repeat(auto-fill,minmax(62px,1fr)); gap:6px;
+    max-height:232px; overflow-y:auto; margin-bottom:8px; padding:4px;
+    border:2px solid var(--line); border-radius:10px; background:#f4f7ef; }
+  .spick .sitem { cursor:pointer; text-align:center; padding:3px 1px 4px; border-radius:8px;
+    border:2px solid transparent; background:#fff; }
+  .spick .sitem:hover { border-color:var(--line); }
+  .spick .sitem.sel { border-color:var(--red); box-shadow:0 0 0 2px var(--red); }
+  /* La hoja es de 144x192 con fotogramas de 48: a 48 px se ve uno entero.
+     La columna 1 es la pose en reposo, la fila 0 la vista de frente. */
+  .spick .cara { width:48px; height:48px; margin:0 auto; image-rendering:pixelated;
+    background-repeat:no-repeat; background-size:144px 192px; background-position:-48px 0; }
+  .spick .snom { font-size:9.5px; line-height:1.15; color:var(--ink-soft); word-break:break-word; }
+  .spick .sgrupo { grid-column:1/-1; font-size:10px; font-weight:700; letter-spacing:.4px;
+    text-transform:uppercase; color:var(--gray); padding:4px 2px 1px; }
+  .spick .vacio { grid-column:1/-1; text-align:center; font-size:11px; color:var(--gray); padding:10px; }
   .newagent summary { cursor:pointer; font-weight:700; font-size:12.5px; color:var(--ink-soft);
     list-style:none; padding:4px 0; }
   .newagent summary::-webkit-details-marker { display:none; }
@@ -265,6 +280,7 @@
             <div class="muted" style="margin-bottom:4px">📎 Archivos de contexto (se adjuntan tras crearlo):</div>
             <input type="file" id="aFiles" multiple style="padding:6px;font-size:12px" />
             <div class="muted" style="margin-bottom:6px">Elige su aspecto:</div>
+            <input class="sbuscar" id="aBuscar" placeholder="Buscar personaje…" autocomplete="off">
             <div class="spick" id="aSprites"></div>
             <button class="small" id="aCreate">Añadir al equipo</button>
           </div>
@@ -440,16 +456,45 @@ async function createRoutine(){
     scheduleType:$('rType').value, everyMinutes:Number($('rEvery').value)||60, at:$('rAt').value||'09:00' });
   $('rTitle').value=''; $('rDesc').value=''; await refresh();
 }
-let spriteOpts = [], spriteSel = 'tu-entrenador';
+let spriteOpts = [], spriteInfo = [], spriteSel = 'tu-entrenador';
 async function loadSpriteOptions(){
-  try { spriteOpts = await getJSON('/api/sprites'); } catch(e) { spriteOpts = []; }
+  try {
+    const raw = await getJSON('/api/sprites');
+    // Compatibilidad: antes era una lista de nombres, ahora {name,tipo}
+    spriteInfo = raw.map(x => typeof x === 'string' ? { name:x, tipo:'persona' } : x);
+    spriteOpts = spriteInfo.map(x => x.name);
+  } catch(e) { spriteInfo = []; spriteOpts = []; }
+  $('aBuscar')?.addEventListener('input', renderSpritePicker);
   renderSpritePicker();
 }
+const bonito = (sp) => sp.replace(/-/g,' ').replace(/^./, c => c.toUpperCase());
+
+// Rejilla agrupada por tipo. La usan el formulario de alta y la ficha de cada
+// agente, así el aspecto se elige igual en los dos sitios.
+function pintarRejilla(destino, elegido, filtro, alElegir){
+  const q = (filtro||'').trim().toLowerCase();
+  const hay = spriteInfo.filter(x => !q || x.name.toLowerCase().includes(q));
+  if(!hay.length){
+    destino.replaceChildren(h('div',{class:'vacio'},'Ningún personaje coincide'));
+    return;
+  }
+  const ficha = (x) => h('div',{ class:'sitem'+(x.name===elegido?' sel':''), title:x.name,
+      onclick:()=>alElegir(x.name) },
+    h('div',{ class:'cara', style:"background-image:url('/sprites/"+x.name+".png')" }),
+    h('div',{ class:'snom' }, bonito(x.name)));
+  const hijos = [];
+  for(const [tipo,etiqueta] of [['persona','Entrenadores'],['criatura','Criaturas']]){
+    const grupo = hay.filter(x => x.tipo === tipo);
+    if(!grupo.length) continue;
+    hijos.push(h('div',{class:'sgrupo'}, etiqueta+' · '+grupo.length));
+    hijos.push(...grupo.map(ficha));
+  }
+  destino.replaceChildren(...hijos);
+}
+
 function renderSpritePicker(){
-  $('aSprites').replaceChildren(...spriteOpts.map(sp =>
-    h('div',{ class:'avatar'+(sp===spriteSel?' sel':''), title:sp,
-      style:"background-image:url('/sprites/"+sp+".png')",
-      onclick:()=>{ spriteSel = sp; renderSpritePicker(); } })));
+  pintarRejilla($('aSprites'), spriteSel, $('aBuscar')?.value,
+    (sp)=>{ spriteSel = sp; renderSpritePicker(); });
 }
 const leerBase64 = (file) => new Promise((res, rej) => {
   const fr = new FileReader();
@@ -586,6 +631,32 @@ let selectedAgent = null;
 
 function selectAgent(key){ selectedAgent = key; renderProfile(); }
 // Panel para editar el manual y gestionar los archivos de un agente propio
+// Cambiar el aspecto está disponible para TODOS los agentes, también los de
+// fábrica: su definición vive en roster.ts, pero el aspecto se guarda aparte.
+const aspectoSel = {};        // clave -> aspecto elegido pero aún sin guardar
+function panelAspecto(a){
+  const rejilla = h('div',{class:'spick'});
+  const buscador = h('input',{class:'sbuscar', placeholder:'Buscar personaje…', autocomplete:'off'});
+  const pinta = () => pintarRejilla(rejilla, aspectoSel[a.key] ?? (a.sprite || a.key),
+    buscador.value, (sp)=>{ aspectoSel[a.key]=sp; pinta(); });
+  buscador.addEventListener('input', pinta);
+  pinta();
+  return h('details',{class:'cfg'},
+    h('summary',{},'🎭 Cambiar aspecto'),
+    h('div',{style:'margin-top:8px'},
+      buscador, rejilla,
+      h('button',{class:'small', onclick:()=>guardarAspecto(a.key)},'💾 Guardar aspecto')));
+}
+async function guardarAspecto(key){
+  const sp = aspectoSel[key];
+  if(!sp) return;
+  const r = await fetch('/api/roster/'+key, { method:'PATCH',
+    headers:{'content-type':'application/json'}, body: JSON.stringify({ sprite: sp }) });
+  if(!r.ok){ alert('No se pudo cambiar el aspecto'); return; }
+  delete aspectoSel[key];
+  await refresh();
+}
+
 function panelConfig(a, abierto){
   const lista = h('div',{});
   (a.files||[]).forEach(f => lista.append(
@@ -644,6 +715,9 @@ function renderProfile(){
       a.task ? h('div',{class:'now'}, h('b',{},'Ahora mismo: '), a.task) : null,
       (a.lastEvent && a.lastEvent.content) ? h('div',{class:'muted',style:'margin-top:6px'}, '💬 '+a.lastEvent.content) : null,
       visiting ? h('div',{class:'muted',style:'margin-top:6px'}, 'De la aldea '+visiting.name) : null,
+      // El aspecto se cambia siempre; el manual y los archivos solo en los
+      // agentes propios, porque el de los de fábrica está en el código.
+      !visiting ? panelAspecto(a) : null,
       (a.custom && !visiting) ? panelConfig(a, abierto) : null),
     h('button',{class:'small reject', title:'Cerrar', onclick:()=>{ selectedAgent=null; renderProfile(); }},'✕')
   ));
