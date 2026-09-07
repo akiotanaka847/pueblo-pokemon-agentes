@@ -609,6 +609,36 @@ let selectedAgent = null;
 
 function selectAgent(key){ selectedAgent = key; renderProfile(); }
 // Panel para editar el manual y gestionar los archivos de un agente propio
+// Cambiar el aspecto está disponible para TODOS los agentes, también los de
+// fábrica: su definición vive en roster.ts, pero el aspecto se guarda aparte.
+const aspectoSel = {};        // clave -> aspecto elegido pero aún sin guardar
+function panelAspecto(a){
+  const rejilla = h('div',{class:'spick'});
+  const pinta = () => {
+    const elegido = aspectoSel[a.key] ?? (a.sprite || a.key);
+    rejilla.replaceChildren(...spriteOpts.map(sp =>
+      h('div',{ class:'sitem'+(sp===elegido?' sel':''), title:sp,
+          onclick:()=>{ aspectoSel[a.key]=sp; pinta(); } },
+        h('div',{class:'cara', style:"background-image:url('/sprites/"+sp+".png')"}),
+        h('div',{class:'snom'}, bonito(sp)))));
+  };
+  pinta();
+  return h('details',{class:'cfg'},
+    h('summary',{},'🎭 Cambiar aspecto'),
+    h('div',{style:'margin-top:8px'},
+      rejilla,
+      h('button',{class:'small', onclick:()=>guardarAspecto(a.key)},'💾 Guardar aspecto')));
+}
+async function guardarAspecto(key){
+  const sp = aspectoSel[key];
+  if(!sp) return;
+  const r = await fetch('/api/roster/'+key, { method:'PATCH',
+    headers:{'content-type':'application/json'}, body: JSON.stringify({ sprite: sp }) });
+  if(!r.ok){ alert('No se pudo cambiar el aspecto'); return; }
+  delete aspectoSel[key];
+  await refresh();
+}
+
 function panelConfig(a, abierto){
   const lista = h('div',{});
   (a.files||[]).forEach(f => lista.append(
@@ -667,6 +697,9 @@ function renderProfile(){
       a.task ? h('div',{class:'now'}, h('b',{},'Ahora mismo: '), a.task) : null,
       (a.lastEvent && a.lastEvent.content) ? h('div',{class:'muted',style:'margin-top:6px'}, '💬 '+a.lastEvent.content) : null,
       visiting ? h('div',{class:'muted',style:'margin-top:6px'}, 'De la aldea '+visiting.name) : null,
+      // El aspecto se cambia siempre; el manual y los archivos solo en los
+      // agentes propios, porque el de los de fábrica está en el código.
+      !visiting ? panelAspecto(a) : null,
       (a.custom && !visiting) ? panelConfig(a, abierto) : null),
     h('button',{class:'small reject', title:'Cerrar', onclick:()=>{ selectedAgent=null; renderProfile(); }},'✕')
   ));

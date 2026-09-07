@@ -261,6 +261,11 @@ export const cx = {
 
   // ── ajustes persistentes (p. ej. la identidad de tu aldea) ──
   getSetting(k: string): string | undefined { return db.settings?.[k]; },
+  // Aspecto de los personajes de fábrica. Su definición vive en roster.ts, que
+  // es código y no se edita en caliente, así que el cambio se guarda aparte y
+  // se aplica al construir el elenco.
+  setSpriteBuiltin(key: string, sprite: string) { (db.settings ||= {})['sprite:' + key] = sprite; persist(); },
+  getSpriteBuiltin(key: string): string | undefined { return db.settings?.['sprite:' + key]; },
   setSetting(k: string, v: string) { (db.settings ||= {})[k] = v; persist(); },
 
   // ── agentes personalizados (los que crea el usuario) ──
@@ -280,7 +285,7 @@ export const cx = {
     ag.files = [...(ag.files || []).filter((f) => f !== filename), filename];
     persist();
   },
-  updateAgent(key: string, cambios: Partial<Pick<CustomAgent, 'role' | 'personality' | 'instructions'>>) {
+  updateAgent(key: string, cambios: Partial<Pick<CustomAgent, 'role' | 'personality' | 'instructions' | 'sprite'>>) {
     const ag = db.customAgents.find((x) => x.key === key); if (!ag) return;
     Object.assign(ag, cambios); persist(); return ag;
   },

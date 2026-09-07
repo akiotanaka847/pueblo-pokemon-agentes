@@ -188,6 +188,17 @@ nombre y buscador, dentro del formulario de **Equipo → nuevo agente**.
 | Oficios | Enfermera, Oficial, Científica, Montañero, Psíquica, Rival |
 | Criaturas | Pikachu, Meowth, Salamandra, Tortuguita |
 
+**Cambiar el aspecto cuando quieras**: haz clic en un personaje del pueblo y
+abre **🎭 Cambiar aspecto** en su ficha. Funciona con cualquiera, también con
+los de fábrica (Oak, Ash…). El cambio se guarda en `agents/db.json` y sobrevive
+a los reinicios.
+
+Por dentro son dos casos distintos: los agentes que creas tú guardan su aspecto
+en su propia ficha, mientras que los de fábrica se definen en `roster.ts`, que
+es código y no se edita en caliente. Para esos, el cambio se guarda como una
+**anulación** que se aplica al construir el elenco, así el código sigue siendo
+el valor por defecto y tus cambios viven aparte sin pisarlo.
+
 **Para añadir más** no hace falta tocar el backend: `/api/sprites` lista los PNG
 de `public/assets/pokemon/`, así que cualquier archivo nuevo de 144x192 aparece
 solo en el selector. Para generarlo, añade su descripción a `PERSONAJES` en

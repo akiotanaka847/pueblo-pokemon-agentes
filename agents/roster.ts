@@ -95,7 +95,8 @@ Eres metódico. ${SHARED}`,
 // ── Roster dinámico: los 8 de fábrica + los que creas tú ──
 export function getRoster(): Record<string, Role> {
   const out: Record<string, Role> = {};
-  for (const [k, v] of Object.entries(builtinRoster)) out[k] = { ...v, sprite: v.sprite || k };
+  for (const [k, v] of Object.entries(builtinRoster))
+    out[k] = { ...v, sprite: cx.getSpriteBuiltin(k) || v.sprite || k };
   for (const a of cx.listCustomAgents()) {
     out[a.key] = {
       name: a.name,

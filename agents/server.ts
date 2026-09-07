@@ -103,13 +103,42 @@ export function startServer() {
     const a = cx.getAgent(req.params.key);
     return a ? res.json(a) : res.status(404).json({ error: 'no encontrado' });
   });
+  // Aspectos disponibles, leídos del disco: sirve para validar el que llega.
+  const spritesValidos = () => {
+    const dir = path.join(__dirname, '..', 'public', 'assets', 'pokemon');
+    try {
+      return new Set(fs.readdirSync(dir)
+        .filter((f) => f.endsWith('.png') && !f.includes('tileset'))
+        .map((f) => f.replace('.png', '')));
+    } catch { return new Set<string>(); }
+  };
+
   app.patch('/api/roster/:key', (req, res) => {
-    const { role, personality, instructions } = req.body || {};
+    const { role, personality, instructions, sprite } = req.body || {};
+    const key = req.params.key;
+
+    // El aspecto se puede cambiar en cualquier momento, también a los
+    // personajes de fábrica. Se valida contra el disco para no dejar la ficha
+    // apuntando a un PNG que no existe.
+    if (sprite !== undefined) {
+      const sp = String(sprite);
+      if (!spritesValidos().has(sp)) return res.status(400).json({ error: 'aspecto desconocido: ' + sp });
+      if (cx.getAgent(key)) cx.updateAgent(key, { sprite: sp });
+      else if (getRoster()[key]) cx.setSpriteBuiltin(key, sp);
+      else return res.status(404).json({ error: 'no encontrado' });
+    }
+
     const cambios: any = {};
     if (role !== undefined) cambios.role = String(role);
     if (personality !== undefined) cambios.personality = String(personality);
     if (instructions !== undefined) cambios.instructions = String(instructions);
-    const a = cx.updateAgent(req.params.key, cambios);
+
+    // Los de fábrica solo admiten el cambio de aspecto: lo demás es código.
+    if (!cx.getAgent(key)) {
+      if (!getRoster()[key]) return res.status(404).json({ error: 'no encontrado' });
+      return res.json({ key, sprite: getRoster()[key].sprite });
+    }
+    const a = Object.keys(cambios).length ? cx.updateAgent(key, cambios) : cx.getAgent(key);
     return a ? res.json(a) : res.status(404).json({ error: 'no encontrado' });
   });
   app.delete('/api/roster/:key', (req, res) => { cx.deleteAgent(req.params.key); res.json({ ok: true }); });
