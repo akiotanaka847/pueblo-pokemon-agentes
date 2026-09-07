@@ -776,6 +776,7 @@ const SPR_K=SPR_DRAW/SPR;
 const SPR_DX=16-SPR_DRAW/2;            // centrado horizontal sobre la baldosa
 const SPR_DY=30-46*SPR_K;              // anclado por los pies
 const OFF={floor:0,wall:1,deskTL:2,chair:3,plant:4,rug:5,door:6,cabinet:7,deskTR:8,
+           wood:15,tiles:16,cntL:17,cntR:18,healer:19,bedT:20,bedB:21,books:22,mat:23,tableI:24,
            boardL:9,boardR:10,coffee:11,shelf:12,deskBL:13,deskBR:14};
 const TOWN={grass:0,grass2:1,tallgrass:2,path:3,water:4,flowerR:5,flowerY:6,tree:7,
             fence:8,sign:9, roofRL:10,roofRM:11,roofRR:12, roofBL:13,roofBM:14,roofBR:15,
@@ -833,11 +834,44 @@ townCanvas.addEventListener('click', (e) => {
 const loadImg = src => new Promise(r=>{ const i=new Image(); i.onload=()=>r(i); i.onerror=()=>r(null); i.src=src; });
 // Casillas que no se pisan (agua y árboles). Se rellena al construir el mapa,
 // así el dibujo y las colisiones nunca se contradicen.
-const BLOQUEADO = new Set();
+// El pueblo deja de ser un mapa único: cada interior es su propia escena, con
+// su fondo, sus casillas bloqueadas y sus portales. Se entra y se sale por las
+// puertas, como en Club Penguin o Habbo.
+const escenas = {};                 // nombre -> {fondo, ctx, bloqueado, portales, ox, oy}
+let escena = 'pueblo';
+let jugador = null;
+const teclas = new Set();
+
+function nuevaEscena(nombre, ancho, alto){
+  const c = document.createElement('canvas');
+  c.width = COLS*TILE; c.height = ROWS*TILE;
+  return escenas[nombre] = {
+    fondo:c, ctx:c.getContext('2d'), bloqueado:new Set(), portales:new Map(),
+    ancho, alto,
+    // Los interiores son más pequeños que el lienzo: se centran y el resto
+    // queda en negro, que además ayuda a leerlos como "otro sitio".
+    ox: Math.floor((COLS-ancho)/2), oy: Math.floor((ROWS-alto)/2),
+  };
+}
+
+const BLOQUEADO = new Set();        // atajo a la escena del pueblo
 const bloquear = (tx,ty) => BLOQUEADO.add(tx+','+ty);
 // Se mira la casilla donde están los PIES, no el centro del sprite: si no, el
 // personaje entra medio cuerpo en el agua antes de que se le frene.
-const pisable = (px,py) => !BLOQUEADO.has(Math.floor((px+16)/TILE)+','+Math.floor((py+40)/TILE));
+const casillaDe = (px,py) => Math.floor((px+16)/TILE)+','+Math.floor((py+40)/TILE);
+const pisable = (px,py) => {
+  const e = escenas[escena];
+  const c = casillaDe(px,py);
+  if(!e) return !BLOQUEADO.has(c);
+  if(e.bloqueado.has(c)) return false;
+  // Fuera de la habitación no se pisa: los interiores no ocupan todo el lienzo.
+  const tx=Math.floor((px+16)/TILE), ty=Math.floor((py+40)/TILE);
+  if(escena!=='pueblo')
+    return tx>=e.ox && ty>=e.oy && tx<e.ox+e.ancho && ty<e.oy+e.alto;
+  // Los límites del mapa hay que comprobarlos: los agentes nunca se acercaban
+  // al borde, pero el jugador va a donde quiera y se salía del pueblo.
+  return tx>=0 && ty>=0 && tx<COLS && ty<ROWS;
+};
 
 const randPark = () => {
   for(let i=0;i<40;i++){
@@ -848,12 +882,106 @@ const randPark = () => {
   return { x:(OFFICE_W+2)*TILE, y:2*TILE };     // rincón siempre libre
 };
 
+// Dibuja una habitación: suelo, pared al fondo y el mobiliario que se le pase.
+// La fila de pared va arriba porque es la que se ve desde una cámara cenital.
+function pintaInterior(esc, oTs, suelo, muebles){
+  const T=(i,cx,cy)=>esc.ctx.drawImage(oTs,(i%8)*TILE,Math.floor(i/8)*TILE,TILE,TILE,
+                                       (esc.ox+cx)*TILE,(esc.oy+cy)*TILE,TILE,TILE);
+  esc.ctx.fillStyle='#141a18';
+  esc.ctx.fillRect(0,0,COLS*TILE,ROWS*TILE);
+  for(let y=0;y<esc.alto;y++) for(let x=0;x<esc.ancho;x++) T(suelo,x,y);
+  for(let x=0;x<esc.ancho;x++){ T(OFF.wall,x,0); esc.bloqueado.add((esc.ox+x)+','+(esc.oy)); }
+  for(const [i,x,y,solido] of muebles){
+    T(i,x,y);
+    if(solido) esc.bloqueado.add((esc.ox+x)+','+(esc.oy+y));
+  }
+  return T;
+}
+
+// Un portal conecta una casilla con otra escena. Se comprueba ANTES que la
+// colisión: la puerta sigue bloqueada para los agentes, pero al jugador lo deja
+// pasar en vez de frenarlo.
+function portal(esc, x, y, destino, dx, dy){
+  esc.portales.set((esc.ox+x)+','+(esc.oy+y), { escena:destino, tx:dx, ty:dy });
+}
+
+// Coloca al jugador de forma que sus PIES caigan en la casilla pedida. Puesto
+// por la esquina del sprite, los pies acaban una casilla más abajo —y al entrar
+// en un interior eso significaba aterrizar sobre el felpudo de salida.
+function colocar(tx, ty){
+  jugador.x = tx*TILE;
+  jugador.y = ty*TILE - 24;
+}
+
+function irA(destino){
+  escena = destino.escena;
+  colocar(destino.tx, destino.ty);
+  jugador.dir = 'down'; jugador.moving = false;
+  selectedAgent = null; renderProfile();
+  pintaLeyenda();
+}
+
+const NOMBRE_ESCENA = { centro:'Centro Pokémon', casa:'Casa' };
+function pintaLeyenda(){
+  const el = $('townLegend'); if(!el) return;
+  if(escena !== 'pueblo'){
+    el.textContent = `🏠 ${NOMBRE_ESCENA[escena]||escena} · 🚪 pisa el felpudo para salir · ⬅️➡️⬆️⬇️ o WASD`;
+    return;
+  }
+  const w = agents.filter(a=>a.state!=='idle').length;
+  el.textContent = visiting
+    ? `🌍 ${visiting.name} · 🏢 ${w} trabajando · 🌳 ${agents.length-w} en el parque`
+    : `🏢 ${w} trabajando · 🌳 ${agents.length-w} en el parque · 🚪 entra por las puertas · ⬅️➡️⬆️⬇️ o WASD`;
+}
+
+function moverJugador(dt){
+  if(!jugador) return;
+  const e = escenas[escena]; if(!e) return;
+  let dx=0, dy=0;
+  if(teclas.has('arriba'))    dy-=1;
+  if(teclas.has('abajo'))     dy+=1;
+  if(teclas.has('izquierda')) dx-=1;
+  if(teclas.has('derecha'))   dx+=1;
+  jugador.moving = !!(dx||dy);
+  if(!jugador.moving) return;
+
+  const n = Math.hypot(dx,dy) || 1;
+  const paso = 0.13*dt;
+  const nx = jugador.x + dx/n*paso, ny = jugador.y + dy/n*paso;
+  jugador.dir = Math.abs(dx)>Math.abs(dy) ? (dx>0?'right':'left') : (dy>0?'down':'up');
+  jugador.t += dt;
+
+  const destino = e.portales.get(casillaDe(nx,ny));
+  if(destino){ irA(destino); return; }
+
+  // Mismos ejes separados que los agentes, con la misma guarda de esquina.
+  let okX = pisable(nx, jugador.y), okY = pisable(jugador.x, ny);
+  if(okX && okY && !pisable(nx,ny)){ if(Math.abs(dx)>=Math.abs(dy)) okY=false; else okX=false; }
+  if(okX) jugador.x = nx;
+  if(okY) jugador.y = ny;
+}
+
+const TECLA = { ArrowUp:'arriba', ArrowDown:'abajo', ArrowLeft:'izquierda', ArrowRight:'derecha',
+                w:'arriba', s:'abajo', a:'izquierda', d:'derecha',
+                W:'arriba', S:'abajo', A:'izquierda', D:'derecha' };
+addEventListener('keydown', (ev)=>{
+  // No se roba el teclado mientras se escribe en un campo.
+  if(/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName||'')) return;
+  const k = TECLA[ev.key]; if(!k) return;
+  teclas.add(k); ev.preventDefault();
+});
+addEventListener('keyup', (ev)=>{ const k = TECLA[ev.key]; if(k) teclas.delete(k); });
+addEventListener('blur', ()=> teclas.clear());
+
 async function initTown(){
   const [oTs,tTs] = await Promise.all([loadImg('/sprites/office-tileset.png'), loadImg('/sprites/town-tileset.png')]);
   await Promise.all(AGENT_KEYS.map(async k => { sprites[k]=await loadImg('/sprites/'+k+'.png'); }));
   if(!oTs||!tTs) return;
-  bg=document.createElement('canvas'); bg.width=COLS*TILE; bg.height=ROWS*TILE;
-  const b=bg.getContext('2d');
+  const pueblo = nuevaEscena('pueblo', COLS, ROWS);
+  pueblo.ox = 0; pueblo.oy = 0;
+  pueblo.bloqueado = BLOQUEADO;      // el pueblo usa el conjunto de siempre
+  bg = pueblo.fondo;
+  const b = pueblo.ctx;
   const T=(ts,i,cx,cy)=>b.drawImage(ts,(i%8)*TILE,Math.floor(i/8)*TILE,TILE,TILE,cx*TILE,cy*TILE,TILE,TILE);
   for(let x=0;x<OFFICE_W;x++) for(let y=0;y<ROWS;y++) T(oTs,OFF.floor,x,y);
   for(let x=3;x<=9;x++) for(let y=6;y<=7;y++) T(oTs,OFF.rug,x,y);
@@ -867,7 +995,12 @@ async function initTown(){
   T(oTs,OFF.coffee,11,12); T(oTs,OFF.plant,10,12);   // rincón de café
   T(oTs,OFF.shelf,0,4); T(oTs,OFF.shelf,0,5);        // estantería
   T(oTs,OFF.plant,0,8);
-  for(let y=0;y<ROWS;y++) T(oTs,(y===6||y===7)?OFF.door:OFF.wall,OFFICE_W,y);
+  // La pared que separa oficina y parque se atravesaba: solo se pasa por la
+  // puerta, que son las dos casillas del centro.
+  for(let y=0;y<ROWS;y++){
+    T(oTs,(y===6||y===7)?OFF.door:OFF.wall,OFFICE_W,y);
+    if(y!==6 && y!==7) bloquear(OFFICE_W,y);
+  }
   // ── Hierba con textura ──
   // Mezcla determinista (sin Math.random) para que el pueblo se vea igual en
   // cada recarga: dos hash distintos evitan que los grupos formen diagonales.
@@ -922,6 +1055,45 @@ async function initTown(){
   for(const [tx,ty] of [[14,0],[19,0],[25,0],[14,4],[19,4],[24,4],[19,9],[25,6],[16,6],[24,7],[14,2]]){
     T(tTs,TOWN.tree,tx,ty); bloquear(tx,ty);
   }
+
+  // ── Interiores ──
+  // Habitaciones grandes: con una sala pequeña el lienzo se llena de negro y
+  // parece que falta algo, en vez de parecer un sitio.
+  const centro = nuevaEscena('centro', 18, 11);
+  pintaInterior(centro, oTs, OFF.tiles, [
+    [OFF.cntL,6,2,true], [OFF.cntR,7,2,true], [OFF.cntL,8,2,true], [OFF.cntR,9,2,true],
+    [OFF.healer,12,1,true], [OFF.healer,14,1,true],
+    [OFF.cabinet,2,1,true], [OFF.books,3,1,true], [OFF.boardL,16,1,true],
+    [OFF.plant,1,1,true], [OFF.plant,16,9,true], [OFF.plant,1,9,true],
+    [OFF.chair,3,5,true], [OFF.tableI,4,5,true], [OFF.chair,5,5,true],
+    [OFF.chair,12,5,true], [OFF.tableI,13,5,true], [OFF.chair,14,5,true],
+    [OFF.rug,8,6,false], [OFF.rug,9,6,false], [OFF.rug,8,7,false], [OFF.rug,9,7,false],
+    [OFF.coffee,16,5,true], [OFF.shelf,2,9,true],
+    [OFF.mat,9,10,false],
+  ]);
+  portal(centro, 9,10, 'pueblo', 17,3);
+
+  const casa = nuevaEscena('casa', 15, 10);
+  pintaInterior(casa, oTs, OFF.wood, [
+    [OFF.bedT,1,1,true], [OFF.bedB,1,2,true],
+    [OFF.bedT,3,1,true], [OFF.bedB,3,2,true],
+    [OFF.books,13,1,true], [OFF.cabinet,12,1,true], [OFF.shelf,11,1,true],
+    [OFF.chair,6,3,true], [OFF.tableI,7,3,true], [OFF.chair,8,3,true],
+    [OFF.plant,1,8,true], [OFF.plant,13,8,true], [OFF.coffee,13,4,true],
+    [OFF.rug,6,6,false], [OFF.rug,7,6,false], [OFF.rug,8,6,false],
+    [OFF.rug,6,7,false], [OFF.rug,7,7,false], [OFF.rug,8,7,false],
+    [OFF.mat,7,9,false],
+  ]);
+  portal(casa, 7,9, 'pueblo', 22,3);
+
+  // Las puertas del pueblo llevan dentro. Siguen bloqueadas para los agentes:
+  // el portal se consulta antes que la colisión, y solo lo usa el jugador.
+  portal(pueblo, 17,2, 'centro', centro.ox+9, centro.oy+9);
+  portal(pueblo, 22,2, 'casa',   casa.ox+7,   casa.oy+8);
+
+  jugador = { x:0, y:0, dir:'down', moving:false, t:0, sprite:'tu-entrenador' };
+  colocar(OFFICE_W+2, 6);
+  pintaLeyenda();
   resizeTown();
   requestAnimationFrame(tick);
 }
@@ -947,6 +1119,27 @@ function spriteFor(a){
   if (sprites[k] === undefined) { sprites[k] = null; loadImg('/sprites/'+k+'.png').then(i => { sprites[k] = i; }); }
   return sprites[k];
 }
+// El avatar se dibuja como un agente más, pero con un aro que lo distingue:
+// con doce personajes en pantalla hay que saber cuál eres tú de un vistazo.
+function drawJugador(){
+  const j = jugador;
+  tctx.save();
+  tctx.strokeStyle='rgba(255,214,64,.95)'; tctx.lineWidth=2;
+  tctx.beginPath(); tctx.ellipse(j.x+16, j.y+30, 11, 4.5, 0, 0, Math.PI*2); tctx.stroke();
+  tctx.restore();
+  tctx.save(); tctx.globalAlpha=.22; tctx.fillStyle='#000';
+  tctx.beginPath(); tctx.ellipse(j.x+16, j.y+30, 9.5, 3.5, 0, 0, Math.PI*2); tctx.fill(); tctx.restore();
+
+  const img = sprites[j.sprite] !== undefined ? sprites[j.sprite] : spriteFor({sprite:j.sprite});
+  const frame = j.moving ? (Math.floor(j.t/150)%3) : 1;
+  if(img) tctx.drawImage(img, frame*SPR, (DIRROW[j.dir]||0)*SPR, SPR, SPR,
+                         Math.round(j.x)+SPR_DX, Math.round(j.y)+SPR_DY, SPR_DRAW, SPR_DRAW);
+  tctx.font='9px system-ui'; tctx.textAlign='center';
+  tctx.fillStyle='#b8860b'; tctx.fillRect(j.x-2,j.y+32,36,12);
+  tctx.fillStyle='#fff'; tctx.fillText('tú', j.x+16, j.y+41);
+  tctx.textAlign='left';
+}
+
 function drawActor(a,ac){
   // aro dorado bajo el personaje apuntado o seleccionado
   if (hoverKey === a.key || selectedAgent === a.key) {
@@ -1008,10 +1201,13 @@ function drawWaterShimmer(ts){
 function tick(ts){
   const dt=Math.min(60,ts-lastTs)||16; lastTs=ts;
   tctx.clearRect(0,0,W_PX,H_PX);
-  if(bg) tctx.drawImage(bg,0,0);
-  drawWaterShimmer(ts);
-  const escena=[];
-  for(const a of agents){
+  const esc = escenas[escena];
+  if(esc) tctx.drawImage(esc.fondo,0,0);
+  if(escena==='pueblo') drawWaterShimmer(ts);
+  moverJugador(dt);
+  const escenaActores=[];
+  // Los agentes viven en el pueblo: dentro de una casa no se dibujan.
+  for(const a of (escena==='pueblo' ? agents : [])){
     const ac=ensureActor(a.key);
     const enc = ac.encuentro;
     ac.enReunion = false;
@@ -1058,12 +1254,13 @@ function tick(ts){
       ac.dir = Math.abs(ddx)>Math.abs(ddy) ? (ddx>0?'right':'left') : (ddy>0?'down':'up');
       ac.t+=dt;
     }
-    escena.push({a,ac});
+    escenaActores.push({a,ac});
   }
   // Orden por profundidad: quien está más abajo se dibuja encima (parece más cerca)
-  escena.sort((p,q)=>p.ac.y-q.ac.y);
+  escenaActores.sort((p,q)=>p.ac.y-q.ac.y);
   carteles.length = 0;
-  for(const {a,ac} of escena) drawActor(a,ac);
+  for(const {a,ac} of escenaActores) drawActor(a,ac);
+  if(jugador) drawJugador();
   requestAnimationFrame(tick);
 }
 let ultimaDelegacion = Date.now();
@@ -1085,13 +1282,13 @@ async function fetchAgents(){
       const v = await getJSON('/api/network/villages/'+visiting.id).catch(()=>null);
       if(v && v.agents) agents = v.agents.map(a => ({ ...a, lastEvent:null }));
       const w = agents.filter(a=>a.state!=='idle').length;
-      $('townLegend').textContent = `🌍 ${visiting.name} · 🏢 ${w} trabajando · 🌳 ${agents.length-w} en el parque`;
+      pintaLeyenda();
       return;
     }
     agents = await getJSON('/api/agents');
     await comprobarDelegaciones();
     const w = agents.filter(a=>a.state!=='idle').length;
-    $('townLegend').textContent = `🏢 ${w} trabajando · 🌳 ${agents.length-w} en el parque · 👆 haz clic en un personaje para ver su ficha`;
+    pintaLeyenda();
     $('working').textContent = w ? `⚙️ ${w} trabajando` : '☕ equipo libre';
   } catch(e){}
 }
