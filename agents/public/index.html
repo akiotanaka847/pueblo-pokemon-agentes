@@ -785,7 +785,7 @@ const TOWN={grass:0,grass2:1,tallgrass:2,path:3,water:4,flowerR:5,flowerY:6,tree
 const DIRROW={down:0,left:1,right:2,up:3};
 const DESKS=[[1,2],[4,2],[7,2],[10,2],[1,8],[4,8],[7,8],[10,8]];
 const AGENT_KEYS=Object.keys(CHARS).filter(k=>!['user','system'].includes(k));
-let agents=[], actors={}, sprites={}, bg=null, lastTs=0;
+let agents=[], actors={}, sprites={}, props={}, bg=null, lastTs=0;
 const townCanvas=$('town'), tctx=townCanvas.getContext('2d');
 const W_PX = COLS*TILE, H_PX = ROWS*TILE;      // tamaño lógico del mundo
 let SCALE = 1;
@@ -884,6 +884,10 @@ const randPark = () => {
 
 // Dibuja una habitación: suelo, pared al fondo y el mobiliario que se le pase.
 // La fila de pared va arriba porque es la que se ve desde una cámara cenital.
+// Los muebles pueden ser una casilla del tileset (un índice) o un OBJETO
+// generado con IA (una cadena 'prop:nombre'). Un objeto ocupa varias casillas
+// y se dibuja de una pieza: no hay que trocearlo ni hacer que los trozos
+// encajen entre sí, que es justo lo que hace difícil el arte por casillas.
 function pintaInterior(esc, oTs, suelo, muebles){
   const T=(i,cx,cy)=>esc.ctx.drawImage(oTs,(i%8)*TILE,Math.floor(i/8)*TILE,TILE,TILE,
                                        (esc.ox+cx)*TILE,(esc.oy+cy)*TILE,TILE,TILE);
@@ -891,7 +895,20 @@ function pintaInterior(esc, oTs, suelo, muebles){
   esc.ctx.fillRect(0,0,COLS*TILE,ROWS*TILE);
   for(let y=0;y<esc.alto;y++) for(let x=0;x<esc.ancho;x++) T(suelo,x,y);
   for(let x=0;x<esc.ancho;x++){ T(OFF.wall,x,0); esc.bloqueado.add((esc.ox+x)+','+(esc.oy)); }
+
   for(const [i,x,y,solido] of muebles){
+    if(typeof i === 'string' && i.startsWith('prop:')){
+      const img = props[i.slice(5)];
+      if(!img) continue;
+      esc.ctx.drawImage(img, (esc.ox+x)*TILE, (esc.oy+y)*TILE);
+      if(solido){
+        // Un objeto tapa varias casillas: se bloquean todas las que cubre.
+        const cw = Math.round(img.width/TILE), ch = Math.round(img.height/TILE);
+        for(let dy=0; dy<ch; dy++) for(let dx=0; dx<cw; dx++)
+          esc.bloqueado.add((esc.ox+x+dx)+','+(esc.oy+y+dy));
+      }
+      continue;
+    }
     T(i,x,y);
     if(solido) esc.bloqueado.add((esc.ox+x)+','+(esc.oy+y));
   }
@@ -975,6 +992,9 @@ addEventListener('blur', ()=> teclas.clear());
 
 async function initTown(){
   const [oTs,tTs] = await Promise.all([loadImg('/sprites/office-tileset.png'), loadImg('/sprites/town-tileset.png')]);
+  // Muebles generados con IA: objetos sueltos, no casillas de rejilla.
+  const PROPS = ['cama','mostrador','estanteria','sofa','mesaCafe','maquina','alfombra','felpudo'];
+  await Promise.all(PROPS.map(async n => { props[n] = await loadImg('/props/'+n+'.png'); }));
   await Promise.all(AGENT_KEYS.map(async k => { sprites[k]=await loadImg('/sprites/'+k+'.png'); }));
   if(!oTs||!tTs) return;
   const pueblo = nuevaEscena('pueblo', COLS, ROWS);
@@ -983,7 +1003,9 @@ async function initTown(){
   bg = pueblo.fondo;
   const b = pueblo.ctx;
   const T=(ts,i,cx,cy)=>b.drawImage(ts,(i%8)*TILE,Math.floor(i/8)*TILE,TILE,TILE,cx*TILE,cy*TILE,TILE,TILE);
-  for(let x=0;x<OFFICE_W;x++) for(let y=0;y<ROWS;y++) T(oTs,OFF.floor,x,y);
+  // Hasta OFFICE_W incluido: la columna de la pared también necesita suelo
+  // debajo, porque la puerta es transparente y si no se vería el vacío.
+  for(let x=0;x<=OFFICE_W;x++) for(let y=0;y<ROWS;y++) T(oTs,OFF.floor,x,y);
   for(let x=3;x<=9;x++) for(let y=6;y<=7;y++) T(oTs,OFF.rug,x,y);
   for(const [dx,dy] of DESKS){
     T(oTs,OFF.chair,dx,dy);                                    // silla arriba
@@ -1061,28 +1083,27 @@ async function initTown(){
   // parece que falta algo, en vez de parecer un sitio.
   const centro = nuevaEscena('centro', 18, 11);
   pintaInterior(centro, oTs, OFF.tiles, [
-    [OFF.cntL,6,2,true], [OFF.cntR,7,2,true], [OFF.cntL,8,2,true], [OFF.cntR,9,2,true],
-    [OFF.healer,12,1,true], [OFF.healer,14,1,true],
-    [OFF.cabinet,2,1,true], [OFF.books,3,1,true], [OFF.boardL,16,1,true],
-    [OFF.plant,1,1,true], [OFF.plant,16,9,true], [OFF.plant,1,9,true],
-    [OFF.chair,3,5,true], [OFF.tableI,4,5,true], [OFF.chair,5,5,true],
-    [OFF.chair,12,5,true], [OFF.tableI,13,5,true], [OFF.chair,14,5,true],
-    [OFF.rug,8,6,false], [OFF.rug,9,6,false], [OFF.rug,8,7,false], [OFF.rug,9,7,false],
-    [OFF.coffee,16,5,true], [OFF.shelf,2,9,true],
-    [OFF.mat,9,10,false],
+    // La alfombra va primero: queda debajo de todo lo demás.
+    ['prop:alfombra',8,6,false],
+    ['prop:mostrador',6,1,true],
+    ['prop:maquina',12,1,true], ['prop:maquina',15,1,true],
+    ['prop:estanteria',1,1,true], ['prop:estanteria',3,1,true],
+    ['prop:sofa',2,5,true], ['prop:mesaCafe',2,7,true],
+    ['prop:sofa',14,5,true], ['prop:mesaCafe',14,7,true],
+    [OFF.plant,0,9,true], [OFF.plant,17,9,true], [OFF.plant,17,3,true], [OFF.plant,0,3,true],
+    ['prop:felpudo',9,10,false],
   ]);
   portal(centro, 9,10, 'pueblo', 17,3);
 
   const casa = nuevaEscena('casa', 15, 10);
   pintaInterior(casa, oTs, OFF.wood, [
-    [OFF.bedT,1,1,true], [OFF.bedB,1,2,true],
-    [OFF.bedT,3,1,true], [OFF.bedB,3,2,true],
-    [OFF.books,13,1,true], [OFF.cabinet,12,1,true], [OFF.shelf,11,1,true],
-    [OFF.chair,6,3,true], [OFF.tableI,7,3,true], [OFF.chair,8,3,true],
-    [OFF.plant,1,8,true], [OFF.plant,13,8,true], [OFF.coffee,13,4,true],
-    [OFF.rug,6,6,false], [OFF.rug,7,6,false], [OFF.rug,8,6,false],
-    [OFF.rug,6,7,false], [OFF.rug,7,7,false], [OFF.rug,8,7,false],
-    [OFF.mat,7,9,false],
+    ['prop:alfombra',6,5,false],
+    ['prop:cama',1,1,true], ['prop:cama',4,1,true],
+    ['prop:estanteria',12,1,true], ['prop:estanteria',13,1,true],
+    ['prop:sofa',6,2,true], ['prop:mesaCafe',6,7,true],
+    ['prop:sofa',11,5,true], ['prop:mesaCafe',11,7,true],
+    [OFF.plant,0,8,true], [OFF.plant,14,8,true], [OFF.plant,14,3,true],
+    ['prop:felpudo',7,9,false],
   ]);
   portal(casa, 7,9, 'pueblo', 22,3);
 
