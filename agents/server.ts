@@ -219,6 +219,7 @@ export function startServer() {
   // tener que forzar el vaciado del navegador.
   const sinCache = { etag: false, lastModified: false, setHeaders: (r: any) => r.set('Cache-Control', 'no-store') };
   app.use('/sprites', express.static(path.join(__dirname, '..', 'public', 'assets', 'pokemon'), sinCache));
+  app.use('/props', express.static(path.join(__dirname, '..', 'public', 'assets', 'pokemon', 'props'), sinCache));
   app.use('/fonts', express.static(path.join(__dirname, '..', 'public', 'assets', 'fonts')));
   // Sin caché: así los cambios del tablero se ven siempre sin recarga forzada.
   app.use(express.static(path.join(__dirname, 'public'), {
