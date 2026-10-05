@@ -3,6 +3,7 @@
 // Vercel AI SDK (interfaz unificada sobre Claude / OpenAI / …). Ejecutan tools reales
 // y piden aprobación humana para acciones sensibles. Todo se emite a Convex para la UI.
 import { generateText, tool, stepCountIs } from 'ai';
+import { conAtributos, registrarContenido } from './telemetria';
 import { z } from 'zod';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -171,17 +172,34 @@ async function runAgent(
   await emit(taskId, actor, 'status', `${isLeader ? 'analizando y planificando' : 'trabajando'} · cerebro: ${brain.label}`);
 
   try {
-    const res = await generateText({
+    // Una misión entera = una sesión de Langfuse. El trabajador corre DENTRO de
+    // la herramienta delegate del líder, así que su traza cuelga sola como hija
+    // de esa llamada: el árbol líder → delegate → trabajador sale sin pasar ids.
+    const tarea = cx.getTask(taskId);
+    const res = await conAtributos({
+      sessionId: String(tarea?.rootTaskId ?? taskId),
+      userId: process.env.VILLAGE_OWNER || undefined,
+      // El nombre de traza solo lo pone el líder: es la raíz y lo comparte todo
+      // el árbol; si lo pusiera el trabajador renombraría la misión entera.
+      ...(isLeader && tarea?.title ? { traceName: tarea.title.slice(0, 200) } : {}),
+      tags: [actor, isLeader ? 'lider' : 'trabajador', brain.label],
+      metadata: { agente: actor, tarea: String(taskId), cerebro: brain.label },
+    }, () => generateText({
       model: brain.model,
       system,
       prompt,
       tools,
       stopWhen: stepCountIs(isLeader ? 24 : 14),
+      telemetry: {
+        functionId: `agente:${actor}`,
+        recordInputs: registrarContenido,
+        recordOutputs: registrarContenido,
+      },
       onStepFinish: async (step: any) => {
         const t = (step?.text || '').trim();
         if (t) await emit(taskId, actor, 'message', t);
       },
-    });
+    }));
     return res.text || '(sin resultado)';
   } catch (e: any) {
     const msg = `⚠️ Error del agente ${actor} (${brain.label}): ${e.message}`;
