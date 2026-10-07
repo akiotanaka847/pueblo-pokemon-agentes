@@ -11,7 +11,8 @@
     "sprites:ia": "node tools/generate-sprites-ai.mjs",
     "map": "node tools/generate-map.mjs",
     "office": "node tools/generate-office.mjs",
-    "hub": "tsx hub/server.ts"
+    "hub": "tsx hub/server.ts",
+    "langfuse": "bash tools/langfuse-local.sh"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.15",

@@ -30,6 +30,7 @@ Este archivo es **local y está fuera de git**. Contiene:
 | `BRAIN` | Cerebro por defecto: `claude` u `openai` |
 | `CLAUDE_MODEL` / `OPENAI_MODEL` | Modelos concretos |
 | `COMPOSIO_API_KEY` + `COMPOSIO_TOOLKITS` | Conectores de 1000+ apps (opcional) |
+| `LANGFUSE_PUBLIC_KEY` + `LANGFUSE_SECRET_KEY` + `LANGFUSE_BASE_URL` | Monitoreo de agentes (opcional) |
 
 ### Cambiar de cerebro
 - **Todos**: pon `BRAIN=openai` en `agents/.env` y reinicia.
@@ -104,6 +105,65 @@ Dos caminos, y puedes usar ambos:
 2. **Servidores MCP directos** — edita `agents/mcp.json` (plantilla con ejemplos en
    [`agents/mcp.example.json`](agents/mcp.example.json)). Los tokens se quedan en tu máquina.
 
+## 📈 Monitoreo de agentes (Langfuse)
+
+Para ver **qué hizo cada agente, cuánto tardó y cuánto costó**. Cada misión
+aparece como un árbol: el Prof. Oak arriba y, colgando de cada delegación, el
+trabajador que la hizo con sus propias llamadas al modelo y sus tokens.
+
+Es **opcional**: sin claves no se carga nada y los agentes funcionan igual.
+
+1. Levanta Langfuse en tu máquina (necesita Docker Desktop abierto):
+   ```bash
+   npm run langfuse
+   ```
+   La primera vez descarga las imágenes y tarda un par de minutos.
+2. Abre **http://localhost:3000**, crea tu cuenta, una organización y un
+   proyecto. En *Settings → API Keys* genera un par de claves.
+3. Pégalas en `agents/.env` y reinicia `npm run agents`:
+   ```bash
+   LANGFUSE_PUBLIC_KEY=pk-lf-...
+   LANGFUSE_SECRET_KEY=sk-lf-...
+   LANGFUSE_BASE_URL=http://localhost:3000
+   ```
+   Al arrancar verás `📈 Telemetría activa → http://localhost:3000`.
+
+Qué encontrarás en Langfuse:
+
+| Dónde | Qué |
+|---|---|
+| **Traces** | Una traza por misión, con el título de la tarea como nombre |
+| Dentro de la traza | El líder, y bajo cada `delegate` el trabajador que la hizo |
+| Cada llamada al modelo | Prompt, respuesta, tokens de entrada/salida y latencia |
+| Cada herramienta | Su duración. Si pidió permiso, incluye lo que tardaste en aprobar |
+| Etiquetas | Quién (`oak`, `misty`…), su papel (`lider`/`trabajador`) y el cerebro |
+
+Langfuse calcula el **coste** de los modelos cuyo precio conoce. Si uno sale
+con tokens pero sin coste (pasa con proveedores menos comunes), añade su precio
+en *Settings → Models* y las trazas nuevas ya lo incluirán.
+
+Privacidad:
+
+- **`LANGFUSE_BASE_URL` es obligatoria.** Sin ella el SDK enviaría a la nube de
+  Langfuse por defecto; aquí prefiere no arrancar a mandar tus prompts fuera
+  sin querer.
+- Con `LANGFUSE_REGISTRAR_CONTENIDO=false` solo viajan tiempos, tokens y
+  costes, **sin** el texto de prompts ni respuestas.
+- El script ata todos los puertos a `127.0.0.1` (el compose oficial abre la web
+  y el almacenamiento a toda tu red wifi) y genera secretos aleatorios en
+  `~/langfuse-local/.env`, **fuera del repositorio**.
+
+Otros comandos:
+
+```bash
+npm run langfuse -- stop     # para Langfuse (conserva las trazas)
+npm run langfuse -- reset    # para y BORRA todas las trazas y tu cuenta local
+npm run langfuse -- check    # solo comprueba la configuración, sin arrancar
+```
+
+Langfuse ocupa unos **3 GB de RAM** (ClickHouse y la web son lo más pesado):
+páralo cuando no lo uses.
+
 ## 📁 Dónde está cada cosa
 
 ```
@@ -114,6 +174,7 @@ agents/
   brains.ts       cerebros intercambiables (Claude / OpenAI / …)
   mcp.ts          cargador de conectores MCP
   composio.ts     conector Composio
+  telemetria.ts   monitoreo con Langfuse (opcional)
   store.ts        datos locales (tareas, eventos, aprobaciones, rutinas)
   server.ts       API REST + SSE en tiempo real
   public/         el tablero
@@ -128,6 +189,9 @@ tools/            generadores pixel-art (sprites, mapa, oficina)
 - **No suena nada** → haz clic en la página una vez, y revisa el botón 🔊.
 - **"0 tools Composio"** → normal si no configuraste `COMPOSIO_API_KEY`.
 - **Cambié el tablero y no lo veo** → recarga forzada (`Cmd+Shift+R`).
+- **No aparecen trazas en Langfuse** → ¿salió `📈 Telemetría activa` al arrancar?
+  Si dice `falta LANGFUSE_BASE_URL`, añádela. Las trazas se envían por lotes:
+  tardan unos segundos en aparecer tras terminar la tarea.
 
 ---
 
