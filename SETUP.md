@@ -77,6 +77,9 @@ Los roles se editan en [`agents/roster.ts`](agents/roster.ts).
 - **Pestañas** — 🗂️ Misiones · 🔁 Rutinas · 👥 Equipo (roles y estado en vivo).
 - **El pueblo en vivo** — los personajes **van a la oficina** cuando trabajan y
   **al parque** cuando están libres. Con globos de texto de lo que hacen.
+- **Entrar en los edificios** — muévete con las flechas o WASD y pisa una puerta.
+  Los agentes libres también entran de visita al Centro Pokémon y a la casa
+  (como mucho tres por edificio). Si les llega trabajo, salen y van a su mesa.
 - **Cuadros de diálogo Pokémon** — los resultados aparecen escribiéndose letra a letra.
 - **Sonidos** — fanfarria al completar una tarea, aviso cuando piden permiso (botón 🔊).
 

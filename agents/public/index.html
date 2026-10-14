@@ -810,7 +810,7 @@ function puntoLienzo(e){
 function agenteCercano(px, py, radio){
   let mejor = null, mejorD = radio*radio;
   for (const a of agents) {
-    const ac = actors[a.key]; if(!ac) continue;
+    const ac = actors[a.key]; if(!ac || ac.esc!==escena) continue;   // solo los que se ven
     const dx = px-(ac.x+16), dy = py-(ac.y+8);
     const d = dx*dx + dy*dy;
     if (d <= mejorD) { mejorD = d; mejor = a; }
@@ -859,25 +859,28 @@ const bloquear = (tx,ty) => BLOQUEADO.add(tx+','+ty);
 // Se mira la casilla donde están los PIES, no el centro del sprite: si no, el
 // personaje entra medio cuerpo en el agua antes de que se le frene.
 const casillaDe = (px,py) => Math.floor((px+16)/TILE)+','+Math.floor((py+40)/TILE);
-const pisable = (px,py) => {
-  const e = escenas[escena];
-  const c = casillaDe(px,py);
-  if(!e) return !BLOQUEADO.has(c);
-  if(e.bloqueado.has(c)) return false;
-  // Fuera de la habitación no se pisa: los interiores no ocupan todo el lienzo.
-  const tx=Math.floor((px+16)/TILE), ty=Math.floor((py+40)/TILE);
-  if(escena!=='pueblo')
-    return tx>=e.ox && ty>=e.oy && tx<e.ox+e.ancho && ty<e.oy+e.alto;
-  // Los límites del mapa hay que comprobarlos: los agentes nunca se acercaban
-  // al borde, pero el jugador va a donde quiera y se salía del pueblo.
-  return tx>=0 && ty>=0 && tx<COLS && ty<ROWS;
-};
+// Los límites hay que comprobarlos: los agentes nunca se acercaban al borde,
+// pero el jugador va a donde quiera y se salía del pueblo. En los interiores,
+// además, fuera de la habitación no se pisa: no ocupan todo el lienzo. (El
+// pueblo es la escena que ocupa el lienzo entero, así que vale la misma cuenta.)
+function casillaLibre(nombre, tx, ty){
+  const e = escenas[nombre];
+  if(!e) return !BLOQUEADO.has(tx+','+ty);
+  if(e.bloqueado.has(tx+','+ty)) return false;
+  return tx>=e.ox && ty>=e.oy && tx<e.ox+e.ancho && ty<e.oy+e.alto;
+}
+// Cada personaje se comprueba contra SU escena, no la que estás mirando: los
+// agentes siguen paseando por el pueblo mientras tú estás dentro de una casa.
+const pisableEn = (nombre,px,py) => casillaLibre(nombre, Math.floor((px+16)/TILE), Math.floor((py+40)/TILE));
+const pisable = (px,py) => pisableEn(escena, px, py);
+// Posición del sprite con los pies en el centro de una casilla.
+const enCasilla = (tx,ty) => ({ x:tx*TILE, y:ty*TILE-24 });
 
 const randPark = () => {
   for(let i=0;i<40;i++){
     const x=((OFFICE_W+2)+Math.floor(Math.random()*(COLS-OFFICE_W-3)))*TILE;
     const y=(1+Math.floor(Math.random()*(ROWS-3)))*TILE;
-    if(pisable(x,y)) return {x,y};
+    if(pisableEn('pueblo',x,y)) return {x,y};
   }
   return { x:(OFFICE_W+2)*TILE, y:2*TILE };     // rincón siempre libre
 };
@@ -926,8 +929,7 @@ function portal(esc, x, y, destino, dx, dy){
 // por la esquina del sprite, los pies acaban una casilla más abajo —y al entrar
 // en un interior eso significaba aterrizar sobre el felpudo de salida.
 function colocar(tx, ty){
-  jugador.x = tx*TILE;
-  jugador.y = ty*TILE - 24;
+  Object.assign(jugador, enCasilla(tx, ty));
 }
 
 function irA(destino){
@@ -942,13 +944,19 @@ const NOMBRE_ESCENA = { centro:'Centro Pokémon', casa:'Casa' };
 function pintaLeyenda(){
   const el = $('townLegend'); if(!el) return;
   if(escena !== 'pueblo'){
-    el.textContent = `🏠 ${NOMBRE_ESCENA[escena]||escena} · 🚪 pisa el felpudo para salir · ⬅️➡️⬆️⬇️ o WASD`;
+    const dentro = agents.filter(a => actors[a.key]?.esc===escena)
+                         .map(a => a.name || (CHARS[a.key]?CHARS[a.key].n:a.key));
+    const quien = dentro.length ? '👥 '+dentro.join(', ') : 'no hay nadie';
+    el.textContent = `🏠 ${NOMBRE_ESCENA[escena]||escena} · ${quien} · 🚪 pisa el felpudo para salir · ⬅️➡️⬆️⬇️ o WASD`;
     return;
   }
   const w = agents.filter(a=>a.state!=='idle').length;
+  // De visita cuenta solo a los libres: uno ocupado ya va camino de su mesa.
+  const v = agents.filter(a => a.state==='idle' && actors[a.key] && actors[a.key].esc!=='pueblo').length;
+  const resumen = `🏢 ${w} trabajando · 🌳 ${agents.length-w-v} en el parque` + (v ? ` · 🏠 ${v} de visita` : '');
   el.textContent = visiting
-    ? `🌍 ${visiting.name} · 🏢 ${w} trabajando · 🌳 ${agents.length-w} en el parque`
-    : `🏢 ${w} trabajando · 🌳 ${agents.length-w} en el parque · 🚪 entra por las puertas · ⬅️➡️⬆️⬇️ o WASD`;
+    ? `🌍 ${visiting.name} · ${resumen}`
+    : `${resumen} · 🚪 entra por las puertas · ⬅️➡️⬆️⬇️ o WASD`;
 }
 
 function moverJugador(dt){
@@ -989,6 +997,171 @@ addEventListener('keydown', (ev)=>{
 });
 addEventListener('keyup', (ev)=>{ const k = TECLA[ev.key]; if(k) teclas.delete(k); });
 addEventListener('blur', ()=> teclas.clear());
+
+// ── Agentes que entran en los edificios ──
+// Cada agente vive en una escena (ac.esc). Libre, de vez en cuando se va de
+// visita a un interior; si le llega trabajo, sale por la puerta y va a su mesa.
+// Se mueven en TODAS las escenas a la vez, se vea o no: así, al entrar en una
+// casa te encuentras a quien estaba dentro, no un decorado congelado.
+let PUERTAS = {};       // edificio -> {fuera:[tx,ty] en el pueblo, dentro:[tx,ty] en el interior}
+let RINCONES = {};      // edificio -> [{x,y,dir}] sitios donde pararse a hacer algo
+const MAX_DENTRO = 3;   // por edificio, para que el parque no se quede vacío
+
+// Camino por casillas (búsqueda en anchura). Yendo en línea recta, un agente
+// que buscaba una puerta se quedaba raspando el primer árbol que hubiera en
+// medio. Si el destino es inalcanzable, llega a la casilla libre más cercana.
+function camino(nombre, desde, hasta){
+  const [sx,sy] = casillaDe(desde.x,desde.y).split(',').map(Number);
+  const [gx,gy] = casillaDe(hasta.x,hasta.y).split(',').map(Number);
+  const previo = new Map([[sx+','+sy, null]]);
+  const cola = [[sx,sy]];
+  let mejor = cola[0], mejorD = Infinity;
+  for(let i=0; i<cola.length; i++){
+    const [x,y] = cola[i];
+    const d = (x-gx)**2 + (y-gy)**2;
+    if(d < mejorD){ mejorD = d; mejor = cola[i]; if(d===0) break; }
+    for(const [vx,vy] of [[1,0],[-1,0],[0,1],[0,-1]]){
+      const nx=x+vx, ny=y+vy, k=nx+','+ny;
+      if(previo.has(k) || !casillaLibre(nombre,nx,ny)) continue;
+      previo.set(k, cola[i]); cola.push([nx,ny]);
+    }
+  }
+  const puntos = [];
+  for(let c=mejor; previo.get(c[0]+','+c[1]); c=previo.get(c[0]+','+c[1])) puntos.unshift(enCasilla(c[0],c[1]));
+  if(mejorD===0){ puntos.pop(); puntos.push({x:hasta.x, y:hasta.y}); }   // remata en el punto exacto
+
+  // Por casillas el camino sale en zigzag, como un robot. Desde cada punto se
+  // salta al más lejano que se vea en línea recta: en campo abierto el agente
+  // va en diagonal, y solo gira donde de verdad hay algo en medio.
+  const ruta = [];
+  for(let i=0, ancla=desde; i<puntos.length; i++){
+    while(i+1<puntos.length && lineaLibre(nombre, ancla, puntos[i+1])) i++;
+    ruta.push(ancla = puntos[i]);
+  }
+  return ruta;
+}
+// ¿Se puede ir de a a b en línea recta? Recorre EXACTAMENTE las casillas que
+// cruza el segmento de los pies. Muestreando cada pocos píxeles se escapaban
+// las esquinas: rozando un árbol en diagonal, el agente lo pisaba un par de
+// fotogramas. Pasar justo por una esquina cuenta como tocar las dos vecinas.
+function lineaLibre(nombre, a, b){
+  const x0=(a.x+16)/TILE, y0=(a.y+40)/TILE, x1=(b.x+16)/TILE, y1=(b.y+40)/TILE;
+  let tx=Math.floor(x0), ty=Math.floor(y0);
+  const gx=Math.floor(x1), gy=Math.floor(y1), dx=x1-x0, dy=y1-y0;
+  const sx=Math.sign(dx), sy=Math.sign(dy);
+  const pasoX = dx ? 1/Math.abs(dx) : Infinity, pasoY = dy ? 1/Math.abs(dy) : Infinity;
+  let bordeX = dx ? (sx>0 ? tx+1-x0 : x0-tx)*pasoX : Infinity;
+  let bordeY = dy ? (sy>0 ? ty+1-y0 : y0-ty)*pasoY : Infinity;
+  for(let n=0; tx!==gx || ty!==gy; n++){
+    if(n > COLS+ROWS) return false;                   // no debería pasar: mejor no fiarse
+    if(Math.abs(bordeX-bordeY) < 1e-9){
+      if(!casillaLibre(nombre,tx+sx,ty) || !casillaLibre(nombre,tx,ty+sy)) return false;
+      tx+=sx; ty+=sy; bordeX+=pasoX; bordeY+=pasoY;
+    } else if(bordeX < bordeY){ tx+=sx; bordeX+=pasoX; }
+    else { ty+=sy; bordeY+=pasoY; }
+    if(!casillaLibre(nombre,tx,ty)) return false;
+  }
+  return true;
+}
+
+// ¿Se va de visita? Solo a veces, y solo si el edificio no está lleno. Un
+// libre decide paseo cada pocos segundos: con un 25 % acababa dentro la mitad
+// del pueblo y el parque se veía vacío; con un 8 %, en torno a un quinto.
+function elegirVisita(ts){
+  if(Math.random() > 0.08) return null;
+  // Cuenta a quien va de camino y también a quien ya terminó pero aún no ha
+  // salido: si no, entraba uno nuevo mientras el otro buscaba el felpudo.
+  const dentro = ed => Object.values(actors)
+    .filter(o => o.esc===ed || (o.visita?.edificio===ed && ts<o.visita.hasta)).length;
+  const libres = Object.keys(PUERTAS).filter(ed => RINCONES[ed]?.length && dentro(ed) < MAX_DENTRO);
+  return libres.length ? libres[Math.floor(Math.random()*libres.length)] : null;
+}
+// Un rincón que no tenga ya otro: dos agentes en la misma casilla parecen uno.
+function rincon(edificio){
+  const ocupados = new Set(Object.values(actors)
+    .filter(o => o.visita?.edificio===edificio && o.paseo).map(o => o.paseo.x+','+o.paseo.y));
+  const lista = RINCONES[edificio] || [];
+  const libres = lista.filter(r => !ocupados.has(r.x+','+r.y));
+  const de = libres.length ? libres : lista;
+  return de[Math.floor(Math.random()*de.length)];
+}
+
+// Qué quiere hacer el agente ahora: escena y punto. El orden es la prioridad:
+// atender al líder, luego el trabajo, luego la visita y por último pasear.
+function objetivo(a, ac, ts){
+  const lac = ac.encuentro && ts < ac.encuentro.hasta && actors[ac.encuentro.con];
+  if(lac) return { esc:lac.esc, x:lac.x+40, y:lac.y+6 };        // se coloca al lado del líder
+  if(a.state==='working' || a.state==='approval'){
+    ac.visita = null;                                            // el trabajo manda: sale ya
+    const d = DESKS[(ac.desk<0?0:ac.desk)%DESKS.length];
+    return { esc:'pueblo', x:d[0]*TILE, y:d[1]*TILE, mesa:true };
+  }
+  const parado = !ac.ruta.length && ts > ac.nextWander;
+  if(ac.visita && ts > ac.visita.hasta){ ac.visita = null; ac.paseo = null; }
+  if(ac.visita){
+    if(!ac.paseo || (parado && ac.esc===ac.visita.edificio)) ac.paseo = rincon(ac.visita.edificio);
+    if(ac.paseo) return { esc:ac.visita.edificio, ...ac.paseo };
+    ac.visita = null;                                            // edificio sin rincones
+  }
+  if(!ac.paseo || (parado && ac.esc==='pueblo')){
+    const ed = elegirVisita(ts);
+    if(ed){
+      ac.visita = { edificio:ed, hasta: ts + 15000 + Math.random()*15000 };
+      ac.paseo = null;
+      return objetivo(a, ac, ts);
+    }
+    ac.paseo = randPark();
+  }
+  return { esc:'pueblo', ...ac.paseo };
+}
+
+// Lleva al agente a su objetivo aunque esté en otra escena: primero cruza la
+// puerta y después sigue al otro lado. Del pueblo se entra a cada edificio y de
+// cada edificio se sale al pueblo, así que basta con mirar una puerta.
+function moverAgente(a, ac, ts, dt){
+  const obj = objetivo(a, ac, ts);
+  let destino = obj, cruza = null;
+  if(ac.esc !== obj.esc){
+    cruza = ac.esc==='pueblo' ? obj.esc : ac.esc;
+    const p = PUERTAS[cruza];
+    destino = enCasilla(...(ac.esc==='pueblo' ? p.fuera : p.dentro));
+  }
+  if(cruza && !ac.ruta.length && Math.hypot(destino.x-ac.x, destino.y-ac.y) < 3){
+    const sale = ac.esc !== 'pueblo', p = PUERTAS[cruza];
+    ac.esc = sale ? 'pueblo' : cruza;
+    Object.assign(ac, enCasilla(...(sale ? p.fuera : p.dentro)));
+    ac.dir = sale ? 'down' : 'up';
+    ac.meta = null; ac.sentado = false;
+    pintaLeyenda();
+    return;
+  }
+  // Se recalcula solo si el destino cambia (o se ha movido, como el líder al
+  // que va a ver): no hace falta buscar camino en cada fotograma.
+  if(!ac.meta || Math.hypot(ac.meta.x-destino.x, ac.meta.y-destino.y) > 16){
+    ac.meta = { x:destino.x, y:destino.y };
+    ac.ruta = camino(ac.esc, ac, destino);
+  }
+  const sig = ac.ruta[0];
+  ac.moving = !!sig;
+  if(sig){
+    const dx=sig.x-ac.x, dy=sig.y-ac.y, dist=Math.hypot(dx,dy), paso=Math.min(dist, 0.12*dt);
+    if(dist>0){
+      ac.x += dx/dist*paso; ac.y += dy/dist*paso;
+      ac.dir = Math.abs(dx)>Math.abs(dy) ? (dx>0?'right':'left') : (dy>0?'down':'up');
+    }
+    ac.t += dt;
+    if(dist <= paso){
+      ac.ruta.shift();
+      if(!ac.ruta.length){
+        ac.nextWander = ts + 3000 + Math.random()*5000;
+        if(!cruza && obj.dir) ac.dir = obj.dir;      // mirando al mueble, no a la pared
+      }
+    }
+  }
+  // Ya en su mesa: se sienta de cara a nosotros y a su escritorio.
+  ac.sentado = !!obj.mesa && !cruza && !ac.ruta.length;
+  if(ac.sentado) ac.dir = 'down';
+}
 
 async function initTown(){
   const [oTs,tTs] = await Promise.all([loadImg('/sprites/office-tileset.png'), loadImg('/sprites/town-tileset.png')]);
@@ -1093,7 +1266,6 @@ async function initTown(){
     [OFF.plant,0,9,true], [OFF.plant,17,9,true], [OFF.plant,17,3,true], [OFF.plant,0,3,true],
     ['prop:felpudo',9,10,false],
   ]);
-  portal(centro, 9,10, 'pueblo', 17,3);
 
   const casa = nuevaEscena('casa', 15, 10);
   pintaInterior(casa, oTs, OFF.wood, [
@@ -1105,12 +1277,46 @@ async function initTown(){
     [OFF.plant,0,8,true], [OFF.plant,14,8,true], [OFF.plant,14,3,true],
     ['prop:felpudo',7,9,false],
   ]);
-  portal(casa, 7,9, 'pueblo', 22,3);
 
-  // Las puertas del pueblo llevan dentro. Siguen bloqueadas para los agentes:
-  // el portal se consulta antes que la colisión, y solo lo usa el jugador.
-  portal(pueblo, 17,2, 'centro', centro.ox+9, centro.oy+9);
-  portal(pueblo, 22,2, 'casa',   casa.ox+7,   casa.oy+8);
+  // Dónde se planta uno delante de cada puerta, fuera y dentro. Los portales
+  // del jugador y las visitas de los agentes salen de aquí: si cada uno tuviera
+  // sus números, bastaría mover una casa para que dejaran de coincidir.
+  PUERTAS = {
+    centro: { fuera:[17,3], dentro:[centro.ox+9, centro.oy+9] },
+    casa:   { fuera:[22,3], dentro:[casa.ox+7,   casa.oy+8] },
+  };
+  // El jugador cruza al pisar la puerta (justo encima de "fuera") o el felpudo
+  // (justo debajo de "dentro"). Las puertas siguen bloqueadas para los agentes:
+  // el portal se consulta antes que la colisión, y solo lo usa el jugador. Los
+  // agentes cruzan al llegar a "fuera" o "dentro".
+  for(const [nombre, p] of Object.entries(PUERTAS)){
+    const e = escenas[nombre];
+    portal(pueblo, p.fuera[0], p.fuera[1]-1, nombre, ...p.dentro);
+    portal(e, p.dentro[0]-e.ox, p.dentro[1]+1-e.oy, 'pueblo', ...p.fuera);
+  }
+
+  // Sitios donde los agentes se paran a hacer algo, mirando hacia el mueble.
+  // Paseando a casillas al azar parecían gente perdida dentro de una casa.
+  // Si un mueble cambia de sitio y tapa un rincón, ese rincón se descarta solo.
+  const rincones = (nombre, lista) => {
+    const e = escenas[nombre];
+    RINCONES[nombre] = lista
+      .filter(([x,y]) => casillaLibre(nombre, e.ox+x, e.oy+y))
+      .map(([x,y,dir]) => ({ ...enCasilla(e.ox+x, e.oy+y), dir }));
+  };
+  rincones('centro', [
+    [7,3,'up'], [8,3,'up'],          // mostrador
+    [12,3,'up'], [15,3,'up'],        // máquinas
+    [1,3,'up'], [3,3,'up'],          // estanterías
+    [4,6,'left'], [13,6,'right'],    // junto a los sofás
+    [9,6,'down'],                    // en la alfombra
+  ]);
+  rincones('casa', [
+    [2,3,'up'], [4,3,'up'],          // camas
+    [12,3,'up'], [13,3,'up'],        // estanterías
+    [8,3,'left'], [10,6,'right'],    // junto a los sofás
+    [7,5,'down'],                    // en la alfombra
+  ]);
 
   jugador = { x:0, y:0, dir:'down', moving:false, t:0, sprite:'tu-entrenador' };
   colocar(OFFICE_W+2, 6);
@@ -1121,7 +1327,8 @@ async function initTown(){
 function ensureActor(key){
   if(actors[key]) return actors[key];
   const p=randPark();
-  return (actors[key]={x:p.x,y:p.y,tx:p.x,ty:p.y,dir:'down',t:0,moving:false,desk:AGENT_KEYS.indexOf(key),nextWander:0});
+  return (actors[key]={x:p.x,y:p.y,esc:'pueblo',ruta:[],meta:null,paseo:p,visita:null,
+                       dir:'down',t:0,moving:false,desk:AGENT_KEYS.indexOf(key),nextWander:0});
 }
 function drawBubble(cx,topY,text){
   const raw=String(text).replace(/\s+/g,' ').trim();
@@ -1220,62 +1427,20 @@ function drawWaterShimmer(ts){
 }
 
 function tick(ts){
-  const dt=Math.min(60,ts-lastTs)||16; lastTs=ts;
+  // Nunca negativo: los agentes siguen rutas ya comprobadas sin volver a mirar
+  // colisiones, y un paso hacia atrás los haría atravesar paredes.
+  const dt=Math.max(0,Math.min(60,ts-lastTs))||16; lastTs=ts;
   tctx.clearRect(0,0,W_PX,H_PX);
   const esc = escenas[escena];
   if(esc) tctx.drawImage(esc.fondo,0,0);
   if(escena==='pueblo') drawWaterShimmer(ts);
   moverJugador(dt);
   const escenaActores=[];
-  // Los agentes viven en el pueblo: dentro de una casa no se dibujan.
-  for(const a of (escena==='pueblo' ? agents : [])){
+  // Todos se mueven siempre; solo se dibujan los que están en esta escena.
+  for(const a of agents){
     const ac=ensureActor(a.key);
-    const enc = ac.encuentro;
-    ac.enReunion = false;
-    if(enc && ts < enc.hasta && actors[enc.con]){
-      const lac = actors[enc.con];                    // se coloca al lado del líder
-      ac.tx = lac.x + 40; ac.ty = lac.y + 6;
-      ac.sentado = false;
-      ac.enReunion = Math.hypot(ac.tx-ac.x, ac.ty-ac.y) < 6;   // ya está a su lado
-    } else if(enc && ts >= enc.hasta){ ac.encuentro = null; }
-
-    if(ac.encuentro && ts < ac.encuentro.hasta){ /* en camino al líder */ }
-    else if(a.state==='working'||a.state==='approval'){
-      const d=DESKS[(ac.desk<0?0:ac.desk)%DESKS.length]; ac.tx=d[0]*TILE; ac.ty=d[1]*TILE;
-      // ya llegó a su sitio → se sienta mirando al monitor
-      ac.sentado = Math.hypot(ac.tx-ac.x, ac.ty-ac.y) < 3;
-      if(ac.sentado) ac.dir='down';   // de cara a nosotros y a su escritorio
-    } else {
-      ac.sentado = false;
-      const enOficina = ac.tx < OFFICE_W*TILE;
-      if(enOficina || (ts>ac.nextWander && Math.hypot(ac.tx-ac.x,ac.ty-ac.y)<3)){
-        const p=randPark(); ac.tx=p.x; ac.ty=p.y; ac.nextWander=ts+3000+Math.random()*5000;
-      }
-    }
-    const ddx=ac.tx-ac.x, ddy=ac.ty-ac.y, dist=Math.hypot(ddx,ddy);
-    ac.moving = dist>2;
-    if(ac.moving){
-      const step=Math.min(dist,0.12*dt);
-      const nx=ac.x+ddx/dist*step, ny=ac.y+ddy/dist*step;
-      // Se prueba cada eje por separado: así, al topar con el estanque, el
-      // personaje se desliza bordeándolo en vez de quedarse clavado de frente.
-      // Si ya está DENTRO de una casilla bloqueada, se le deja salir: con las
-      // colisiones activas los dos ejes le fallarían y quedaría encerrado.
-      const atrapado = !pisable(ac.x, ac.y);
-      let okX = atrapado || pisable(nx, ac.y), okY = atrapado || pisable(ac.x, ny);
-      // Corte de esquina: cada eje por separado puede estar libre y el destino
-      // en diagonal estar bloqueado. Sin esta comprobación el personaje se cuela
-      // por la esquina de la casilla.
-      if(okX && okY && !atrapado && !pisable(nx, ny)){
-        if(Math.abs(ddx) >= Math.abs(ddy)) okY = false; else okX = false;
-      }
-      if(okX) ac.x=nx;
-      if(okY) ac.y=ny;
-      if(!okX && !okY){ const p=randPark(); ac.tx=p.x; ac.ty=p.y; }   // atascado: otro destino
-      ac.dir = Math.abs(ddx)>Math.abs(ddy) ? (ddx>0?'right':'left') : (ddy>0?'down':'up');
-      ac.t+=dt;
-    }
-    escenaActores.push({a,ac});
+    moverAgente(a, ac, ts, dt);
+    if(ac.esc===escena) escenaActores.push({a,ac});
   }
   // Orden por profundidad: quien está más abajo se dibuja encima (parece más cerca)
   escenaActores.sort((p,q)=>p.ac.y-q.ac.y);
