@@ -78,6 +78,9 @@ Los roles se editan en [`agents/roster.ts`](agents/roster.ts).
 - **Pestañas** — 🗂️ Misiones · 🔁 Rutinas · 👥 Equipo (roles y estado en vivo).
 - **El pueblo en vivo** — los personajes **van a la oficina** cuando trabajan y
   **al parque** cuando están libres. Con globos de texto de lo que hacen.
+- **La oficina** — el Prof. Oak tiene su mesa de jefe y cada trabajador se sienta
+  en la suya de siempre si está libre. Si trabajan más que mesas hay, los que
+  sobran esperan de pie junto a la mesa de reuniones.
 - **Entrar en los edificios** — muévete con las flechas o WASD y pisa una puerta.
   Los agentes libres también entran de visita al Centro Pokémon y a la casa
   (como mucho tres por edificio). Si les llega trabajo, salen y van a su mesa.
@@ -243,6 +246,25 @@ derecho y monta la rejilla de 48x48.
 - `ALTURA` fija la altura relativa de cada personaje. Las criaturas van al 62-68%
   para que no midan lo mismo que un adulto. Los sprites se anclan por los **pies**,
   así los bajitos se apoyan en el suelo en vez de quedar flotando.
+
+### Muebles
+
+Los muebles de la oficina y de los interiores también se generan con IA, con
+Gemini (`GOOGLE_API_KEY` en `agents/.env`). Cada uno es **una sola imagen**,
+aunque ocupe varias casillas. Los suelos y las paredes siguen siendo código,
+porque se repiten y tienen que encajar con sus vecinos.
+
+```bash
+node tools/generate-props-ai.mjs escritorio      # uno
+node tools/generate-props-ai.mjs --todos         # todos
+```
+
+- Las descripciones y el tamaño en casillas están en `MUEBLES`, dentro de
+  `tools/generate-props-ai.mjs`.
+- A veces el modelo devuelve el fondo **blanco** en vez de magenta (sale una caja
+  blanca alrededor del mueble) o dibuja **dos** objetos. Basta con repetir ese mueble.
+- Si cambias el tamaño en casillas, `--rehacer` reprocesa la imagen ya
+  descargada **sin volver a pagar**.
 
 ## 🎭 Biblioteca de personajes
 

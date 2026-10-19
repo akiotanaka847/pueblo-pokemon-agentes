@@ -43,6 +43,20 @@ const MUEBLES = {
   alfombra:   { w: 3, h: 2, d: 'a rectangular woven rug lying flat on the floor, seen from above: deep red wool with a cream geometric border pattern and short fringes on the short sides' },
   felpudo:    { w: 1, h: 1, d: 'a small rectangular doormat lying flat on the floor, seen from above: coarse brown coir fibre with a darker border' },
   maquina:    { w: 2, h: 2, d: 'a futuristic white medical healing machine seen from a high angle: rounded casing, a row of glowing green lights, six round slots on the top surface' },
+
+  // ── Oficina ──
+  // Los agentes se sientan DETRÁS de la mesa, de cara a nosotros: la pantalla
+  // tiene que mirar hacia ellos, así que desde aquí se ve por detrás.
+  escritorio:     { w: 2, h: 2, d: 'a modern office desk seen from a high angle: light oak wooden top on white legs, a slim computer monitor seen from behind with its screen facing away from the viewer, a keyboard, a coffee mug and a small stack of papers' },
+  escritorioJefe: { w: 3, h: 2, d: 'a large executive desk seen from a high angle: dark polished wood with a panelled front, a green banker\'s lamp, a laptop seen from behind with its screen facing away from the viewer, neat stacks of documents and a small globe' },
+  silla:          { w: 1, h: 1, d: 'a black office swivel chair seen from a high angle and from behind: padded backrest, armrests, five-wheel base' },
+  pizarra:        { w: 2, h: 1, d: 'a wide whiteboard hanging on a wall, seen straight from the front: thin aluminium frame, a hand-drawn bar chart, arrows and three colourful sticky notes, a marker tray along the bottom edge' },
+  fotocopiadora:  { w: 2, h: 2, d: 'a large office photocopier seen from a high angle: light grey plastic body, a control panel with small buttons and a little green screen, an output tray with white sheets of paper' },
+  dispensador:    { w: 1, h: 2, d: 'ONE single office water cooler, alone, seen from a high angle: a big upside-down light blue water bottle on top of a white cabinet with two small taps, one red and one blue' },
+  archivador:     { w: 1, h: 2, d: 'a tall grey metal filing cabinet seen from a high angle: four drawers with small handles and paper labels, a tiny potted cactus on top' },
+  plantaAlta:     { w: 1, h: 2, d: 'a tall potted monstera plant seen from a high angle: large glossy green split leaves in a round terracotta pot' },
+  mesaReunion:    { w: 3, h: 2, d: 'an oval meeting table seen from a high angle: light wooden top, four grey office chairs tucked in around it, a few papers and a glass jug of water on top' },
+  cafe:           { w: 2, h: 1, d: 'a small kitchen cupboard seen from a high angle: white doors, a wooden worktop with an espresso machine and two mugs on top' },
 };
 
 function prompt(m) {

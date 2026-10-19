@@ -783,7 +783,15 @@ const TOWN={grass:0,grass2:1,tallgrass:2,path:3,water:4,flowerR:5,flowerY:6,tree
             roofGL:16,roofGM:17,roofGR:18, wall:19,door:20,window:21,
             roofPCL:22,roofPCM:23,roofPCC:24,roofPCR:25, glassdoor:26};
 const DIRROW={down:0,left:1,right:2,up:3};
-const DESKS=[[1,2],[4,2],[7,2],[10,2],[1,8],[4,8],[7,8],[10,8]];
+// Puestos de la oficina: la casilla de la SILLA. La mesa queda justo debajo y
+// el agente se sienta de cara a nosotros. El líder tiene la suya; las demás
+// se reparten al empezar a trabajar (ver puestoPara).
+const MESA_JEFE=[2,1];
+const MESAS=[[1,5],[4,5],[7,5],[1,9],[4,9],[7,9]];
+// Si hay más gente trabajando que mesas, los que sobran se quedan de pie junto
+// a la mesa de reuniones, mirándola, en vez de sentarse encima de otro. Nunca
+// dos en la misma columna seguidos: el de abajo taparía al de arriba.
+const PUESTOS_EXTRA=[[9,10,'right'],[10,12,'up'],[11,12,'up'],[11,9,'down'],[12,9,'down']];
 const AGENT_KEYS=Object.keys(CHARS).filter(k=>!['user','system'].includes(k));
 let agents=[], actors={}, sprites={}, props={}, bg=null, lastTs=0;
 const townCanvas=$('town'), tctx=townCanvas.getContext('2d');
@@ -898,7 +906,14 @@ function pintaInterior(esc, oTs, suelo, muebles){
   esc.ctx.fillRect(0,0,COLS*TILE,ROWS*TILE);
   for(let y=0;y<esc.alto;y++) for(let x=0;x<esc.ancho;x++) T(suelo,x,y);
   for(let x=0;x<esc.ancho;x++){ T(OFF.wall,x,0); esc.bloqueado.add((esc.ox+x)+','+(esc.oy)); }
+  ponMuebles(esc, oTs, muebles);
+}
 
+// Coloca muebles en una escena, en orden: lo primero queda debajo. La oficina
+// también los usa, aunque esté dentro del pueblo y no sea un interior.
+function ponMuebles(esc, oTs, muebles){
+  const T=(i,cx,cy)=>esc.ctx.drawImage(oTs,(i%8)*TILE,Math.floor(i/8)*TILE,TILE,TILE,
+                                       (esc.ox+cx)*TILE,(esc.oy+cy)*TILE,TILE,TILE);
   for(const [i,x,y,solido] of muebles){
     if(typeof i === 'string' && i.startsWith('prop:')){
       const img = props[i.slice(5)];
@@ -915,7 +930,6 @@ function pintaInterior(esc, oTs, suelo, muebles){
     T(i,x,y);
     if(solido) esc.bloqueado.add((esc.ox+x)+','+(esc.oy+y));
   }
-  return T;
 }
 
 // Un portal conecta una casilla con otra escena. Se comprueba ANTES que la
@@ -1086,6 +1100,24 @@ function rincon(edificio){
   return de[Math.floor(Math.random()*de.length)];
 }
 
+// La mesa de cada uno: la suya de siempre si está libre; si no, la primera
+// libre; y si no queda ninguna, de pie junto a la mesa de reuniones. Antes la
+// mesa salía de su posición en una lista de 8, y todos los agentes que creabas
+// tú caían en la 0: encima del Prof. Oak.
+function puestoPara(a, ac){
+  // Se sienta con los pies sobre la mesa, que está bloqueada: se llega por la
+  // casilla de la silla ("entrada") y el último paso es sentarse.
+  const sentado = ([sx,sy]) => ({ x:sx*TILE, y:sy*TILE, entrada:enCasilla(sx,sy), mesa:true });
+  if(a.isLeader) return sentado(MESA_JEFE);
+  // Solo cuentan los agentes que siguen existiendo: uno borrado no ocupa mesa.
+  const ocupado = new Set(agents.map(o => actors[o.key]?.puesto).filter(Boolean).map(p => p.x+','+p.y));
+  const suya = ac.desk > 0 ? sentado(MESAS[(ac.desk-1) % MESAS.length]) : null;
+  if(suya && !ocupado.has(suya.x+','+suya.y)) return suya;
+  const libres = [...MESAS.map(sentado), ...PUESTOS_EXTRA.map(([x,y,dir]) => ({ ...enCasilla(x,y), dir }))]
+    .filter(p => !ocupado.has(p.x+','+p.y));
+  return libres[0] || sentado(MESAS[0]);
+}
+
 // Qué quiere hacer el agente ahora: escena y punto. El orden es la prioridad:
 // atender al líder, luego el trabajo, luego la visita y por último pasear.
 function objetivo(a, ac, ts){
@@ -1093,9 +1125,10 @@ function objetivo(a, ac, ts){
   if(lac) return { esc:lac.esc, x:lac.x+40, y:lac.y+6 };        // se coloca al lado del líder
   if(a.state==='working' || a.state==='approval'){
     ac.visita = null;                                            // el trabajo manda: sale ya
-    const d = DESKS[(ac.desk<0?0:ac.desk)%DESKS.length];
-    return { esc:'pueblo', x:d[0]*TILE, y:d[1]*TILE, mesa:true };
+    ac.puesto = ac.puesto || puestoPara(a, ac);                  // y lo conserva mientras trabaja
+    return { esc:'pueblo', ...ac.puesto };
   }
+  ac.puesto = null;                                              // libre: deja la mesa a otro
   const parado = !ac.ruta.length && ts > ac.nextWander;
   if(ac.visita && ts > ac.visita.hasta){ ac.visita = null; ac.paseo = null; }
   if(ac.visita){
@@ -1139,7 +1172,12 @@ function moverAgente(a, ac, ts, dt){
   // que va a ver): no hace falta buscar camino en cada fotograma.
   if(!ac.meta || Math.hypot(ac.meta.x-destino.x, ac.meta.y-destino.y) > 16){
     ac.meta = { x:destino.x, y:destino.y };
-    ac.ruta = camino(ac.esc, ac, destino);
+    // Para sentarse se va a la silla y se baja a la mesa; para levantarse, al
+    // revés: primero vuelve a la silla. Si no, saldría atravesando la mesa.
+    ac.ruta = camino(ac.esc, ac.asiento || ac, destino.entrada || destino);
+    if(ac.asiento) ac.ruta.unshift(ac.asiento);
+    if(destino.entrada) ac.ruta.push({ x:destino.x, y:destino.y });
+    ac.asiento = null;
   }
   const sig = ac.ruta[0];
   ac.moving = !!sig;
@@ -1160,13 +1198,15 @@ function moverAgente(a, ac, ts, dt){
   }
   // Ya en su mesa: se sienta de cara a nosotros y a su escritorio.
   ac.sentado = !!obj.mesa && !cruza && !ac.ruta.length;
-  if(ac.sentado) ac.dir = 'down';
+  if(ac.sentado){ ac.dir = 'down'; ac.asiento = obj.entrada; }
 }
 
 async function initTown(){
   const [oTs,tTs] = await Promise.all([loadImg('/sprites/office-tileset.png'), loadImg('/sprites/town-tileset.png')]);
   // Muebles generados con IA: objetos sueltos, no casillas de rejilla.
-  const PROPS = ['cama','mostrador','estanteria','sofa','mesaCafe','maquina','alfombra','felpudo'];
+  const PROPS = ['cama','mostrador','estanteria','sofa','mesaCafe','maquina','alfombra','felpudo',
+                 'escritorio','escritorioJefe','silla','pizarra','fotocopiadora','dispensador',
+                 'archivador','plantaAlta','mesaReunion','cafe'];
   await Promise.all(PROPS.map(async n => { props[n] = await loadImg('/props/'+n+'.png'); }));
   await Promise.all(AGENT_KEYS.map(async k => { sprites[k]=await loadImg('/sprites/'+k+'.png'); }));
   if(!oTs||!tTs) return;
@@ -1179,17 +1219,30 @@ async function initTown(){
   // Hasta OFFICE_W incluido: la columna de la pared también necesita suelo
   // debajo, porque la puerta es transparente y si no se vería el vacío.
   for(let x=0;x<=OFFICE_W;x++) for(let y=0;y<ROWS;y++) T(oTs,OFF.floor,x,y);
-  for(let x=3;x<=9;x++) for(let y=6;y<=7;y++) T(oTs,OFF.rug,x,y);
-  for(const [dx,dy] of DESKS){
-    T(oTs,OFF.chair,dx,dy);                                    // silla arriba
-    T(oTs,OFF.deskTL,dx,dy+1);   T(oTs,OFF.deskTR,dx+1,dy+1);  // superficie
-    T(oTs,OFF.deskBL,dx,dy+2);   T(oTs,OFF.deskBR,dx+1,dy+2);  // frente y patas
-  }
-  T(oTs,OFF.plant,0,0); T(oTs,OFF.plant,12,13); T(oTs,OFF.cabinet,0,12); T(oTs,OFF.cabinet,12,0);
-  T(oTs,OFF.boardL,4,0); T(oTs,OFF.boardR,5,0);      // pizarra del equipo
-  T(oTs,OFF.coffee,11,12); T(oTs,OFF.plant,10,12);   // rincón de café
-  T(oTs,OFF.shelf,0,4); T(oTs,OFF.shelf,0,5);        // estantería
-  T(oTs,OFF.plant,0,8);
+  // Pared del fondo, como en los interiores: sin ella la pizarra y los
+  // archivadores parecían flotar en mitad del suelo.
+  for(let x=0;x<OFFICE_W;x++){ T(oTs,OFF.wall,x,0); bloquear(x,0); }
+  // Muebles de una pieza, como en los interiores, y SÓLIDOS: antes las mesas
+  // eran dibujo de suelo y los agentes pasaban por encima. Las sillas se
+  // pisan, porque es donde se sientan.
+  const silla = ([x,y]) => ['prop:silla',x,y,false];
+  const mesa  = ([x,y]) => ['prop:escritorio',x,y+1,true];
+  ponMuebles(pueblo, oTs, [
+    ['prop:pizarra',5,0,false],                                   // colgada en la pared
+    // Rincón del líder
+    ['prop:estanteria',0,1,true],
+    silla(MESA_JEFE), ['prop:escritorioJefe',MESA_JEFE[0]-1,MESA_JEFE[1]+1,true],
+    ['prop:plantaAlta',4,2,true],
+    // Café y agua
+    ['prop:cafe',9,1,true], ['prop:dispensador',11,1,true], ['prop:plantaAlta',12,1,true],
+    // Mesas del equipo
+    ...MESAS.map(silla), ...MESAS.map(mesa),
+    // Reuniones: la alfombra primero, para que quede debajo
+    ['prop:alfombra',10,10,false], ['prop:mesaReunion',10,10,true],
+    // Al fondo
+    ['prop:archivador',0,12,true], ['prop:archivador',1,12,true],
+    ['prop:fotocopiadora',4,12,true], ['prop:plantaAlta',12,12,true],
+  ]);
   // La pared que separa oficina y parque se atravesaba: solo se pasa por la
   // puerta, que son las dos casillas del centro.
   for(let y=0;y<ROWS;y++){
