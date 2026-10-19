@@ -12,6 +12,14 @@ if (!process.env.ANTHROPIC_API_KEY && !process.env.OPENAI_API_KEY) {
   process.exit(1);
 }
 
+// La telemetría se inicia ANTES que el orquestador: las llamadas al modelo
+// deben encontrar ya registrada la integración.
+const { iniciarTelemetria, cerrarTelemetria } = await import('./telemetria');
+await iniciarTelemetria();
+for (const senal of ['SIGINT', 'SIGTERM'] as const) {
+  process.once(senal, async () => { await cerrarTelemetria(); process.exit(0); });
+}
+
 const { startServer } = await import('./server');
 const { startHeartbeat } = await import('./network');
 const { mainLoop } = await import('./orchestrator');

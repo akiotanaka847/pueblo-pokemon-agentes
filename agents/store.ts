@@ -308,6 +308,7 @@ export const cx = {
   listMissions(): Task[] {
     return db.tasks.filter((t) => !t.parentTaskId).sort((a, b) => b.createdAt - a.createdAt);
   },
+  getTask(id: TaskId) { return getTask(id); },
   getMission(rootTaskId: TaskId) {
     return {
       root: getTask(rootTaskId) ?? null,
