@@ -84,6 +84,8 @@ Los roles se editan en [`agents/roster.ts`](agents/roster.ts).
 - **Entrar en los edificios** — muévete con las flechas o WASD y pisa una puerta.
   Los agentes libres también entran de visita al Centro Pokémon y a la casa
   (como mucho tres por edificio). Si les llega trabajo, salen y van a su mesa.
+  Dentro hacen cosas: se curan en el mostrador, leen, toman café o se echan
+  una siesta metidos en la cama. Al empezar lo cuentan en un globo.
 - **Cuadros de diálogo Pokémon** — los resultados aparecen escribiéndose letra a letra.
 - **Sonidos** — fanfarria al completar una tarea, aviso cuando piden permiso (botón 🔊).
 
