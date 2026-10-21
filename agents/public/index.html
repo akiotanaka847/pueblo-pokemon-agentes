@@ -819,7 +819,8 @@ function agenteCercano(px, py, radio){
   let mejor = null, mejorD = radio*radio;
   for (const a of agents) {
     const ac = actors[a.key]; if(!ac || ac.esc!==escena) continue;   // solo los que se ven
-    const dx = px-(ac.x+16), dy = py-(ac.y+8);
+    const v = ac.vista || ac;                                         // en la cama, su cabeza
+    const dx = px-(v.x+16), dy = py-(v.y+8);
     const d = dx*dx + dy*dy;
     if (d <= mejorD) { mejorD = d; mejor = a; }
   }
@@ -959,7 +960,8 @@ function pintaLeyenda(){
   const el = $('townLegend'); if(!el) return;
   if(escena !== 'pueblo'){
     const dentro = agents.filter(a => actors[a.key]?.esc===escena)
-                         .map(a => a.name || (CHARS[a.key]?CHARS[a.key].n:a.key));
+                         .map(a => (a.name || (CHARS[a.key]?CHARS[a.key].n:a.key)) +
+                                   (actors[a.key].actividad ? ' '+actors[a.key].actividad.icono : ''));
     const quien = dentro.length ? '👥 '+dentro.join(', ') : 'no hay nadie';
     el.textContent = `🏠 ${NOMBRE_ESCENA[escena]||escena} · ${quien} · 🚪 pisa el felpudo para salir · ⬅️➡️⬆️⬇️ o WASD`;
     return;
@@ -1178,6 +1180,7 @@ function moverAgente(a, ac, ts, dt){
     if(ac.asiento) ac.ruta.unshift(ac.asiento);
     if(destino.entrada) ac.ruta.push({ x:destino.x, y:destino.y });
     ac.asiento = null;
+    ac.actividad = null;                             // se va: deja lo que hacía
   }
   const sig = ac.ruta[0];
   ac.moving = !!sig;
@@ -1191,8 +1194,17 @@ function moverAgente(a, ac, ts, dt){
     if(dist <= paso){
       ac.ruta.shift();
       if(!ac.ruta.length){
+        ac.moving = false;                           // ha llegado: ya no anda
         ac.nextWander = ts + 3000 + Math.random()*5000;
         if(!cruza && obj.dir) ac.dir = obj.dir;      // mirando al mueble, no a la pared
+        if(!cruza && obj.accion){
+          // Se queda lo que dure lo que hace, y la visita se alarga si hace
+          // falta: una siesta no se corta a los cinco segundos. El trabajo sí
+          // la corta, porque cambia el objetivo.
+          ac.actividad = { ...obj.accion, desde: ts };
+          ac.nextWander = ts + (obj.accion.larga ? 15000 + Math.random()*10000 : 5000 + Math.random()*5000);
+          if(ac.visita) ac.visita.hasta = Math.max(ac.visita.hasta, ac.nextWander);
+        }
       }
     }
   }
@@ -1351,24 +1363,39 @@ async function initTown(){
   // Sitios donde los agentes se paran a hacer algo, mirando hacia el mueble.
   // Paseando a casillas al azar parecían gente perdida dentro de una casa.
   // Si un mueble cambia de sitio y tapa un rincón, ese rincón se descarta solo.
+  // La cama de la siesta se pasa en casillas locales y se guarda en píxeles.
   const rincones = (nombre, lista) => {
     const e = escenas[nombre];
     RINCONES[nombre] = lista
       .filter(([x,y]) => casillaLibre(nombre, e.ox+x, e.oy+y))
-      .map(([x,y,dir]) => ({ ...enCasilla(e.ox+x, e.oy+y), dir }));
+      .map(([x,y,dir,accion]) => ({ ...enCasilla(e.ox+x, e.oy+y), dir,
+        accion: accion?.cama ? { ...accion, cama:{ x:(e.ox+accion.cama[0])*TILE, y:(e.oy+accion.cama[1])*TILE } }
+                             : accion }));
+  };
+  // Qué hace cada uno en su rincón: al llegar lo cuenta en un globo y luego se
+  // queda con su icono. La siesta es especial: se mete en la cama.
+  const A = {
+    curar:    { icono:'💊', texto:'Curando a su equipo' },
+    recargar: { icono:'✨', texto:'Recargando energía' },
+    leer:     { icono:'📖', texto:'Leyendo un rato' },
+    libro:    { icono:'📚', texto:'Buscando un libro' },
+    cafe:     { icono:'☕', texto:'Tomando un café' },
+    charlar:  { icono:'💬', texto:'Charlando' },
+    estirar:  { icono:'🧘', texto:'Estirándose' },
+    siesta:   { icono:'💤', texto:'Echando una siesta', larga:true },
   };
   rincones('centro', [
-    [7,3,'up'], [8,3,'up'],          // mostrador
-    [12,3,'up'], [15,3,'up'],        // máquinas
-    [1,3,'up'], [3,3,'up'],          // estanterías
-    [4,6,'left'], [13,6,'right'],    // junto a los sofás
-    [9,6,'down'],                    // en la alfombra
+    [7,3,'up',A.curar], [8,3,'up',A.curar],              // mostrador
+    [12,3,'up',A.recargar], [15,3,'up',A.recargar],      // máquinas
+    [1,3,'up',A.leer], [3,3,'up',A.leer],                // estanterías
+    [4,6,'left',A.cafe], [13,6,'right',A.cafe],          // junto a los sofás
+    [9,6,'down',A.charlar],                              // en la alfombra
   ]);
   rincones('casa', [
-    [2,3,'up'], [4,3,'up'],          // camas
-    [12,3,'up'], [13,3,'up'],        // estanterías
-    [8,3,'left'], [10,6,'right'],    // junto a los sofás
-    [7,5,'down'],                    // en la alfombra
+    [2,3,'up',{...A.siesta, cama:[1,1]}], [4,3,'up',{...A.siesta, cama:[4,1]}],   // camas
+    [12,3,'up',A.libro], [13,3,'up',A.libro],            // estanterías
+    [8,3,'left',A.cafe], [10,6,'right',A.cafe],          // junto a los sofás
+    [7,5,'down',A.estirar],                              // en la alfombra
   ]);
 
   jugador = { x:0, y:0, dir:'down', moving:false, t:0, sprite:'tu-entrenador' };
@@ -1421,7 +1448,74 @@ function drawJugador(){
   tctx.textAlign='left';
 }
 
+// Fila en la que empieza la cabeza en el fotograma de frente. Las criaturas
+// son más bajas y su cabeza no empieza arriba del todo. Se mide una vez.
+function topeCabeza(img){
+  if(img.__tope !== undefined) return img.__tope;
+  const c = document.createElement('canvas'); c.width = c.height = SPR;
+  const g = c.getContext('2d'); g.drawImage(img, SPR, 0, SPR, SPR, 0, 0, SPR, SPR);
+  const d = g.getImageData(0, 0, SPR, SPR).data;
+  let y = 0;
+  while(y < SPR-1 && !d.slice(y*SPR*4, (y+1)*SPR*4).some((v,i) => i%4===3 && v>0)) y++;
+  return img.__tope = y;
+}
+
+// La siesta: la cabeza sobre la almohada y la parte de delante de la cama
+// repintada encima, así la sábana y la manta tapan el cuerpo. Las medidas son
+// las de cama.png: la almohada está hacia (47,27) y la sábana empieza en y=30.
+const ALMOHADA = { x:47, y:27, corte:30 };
+function dibujaDormido(a, ac, img, cama){
+  const hx = cama.x + ALMOHADA.x, hy = cama.y + ALMOHADA.y;
+  ac.vista = { x:hx-16, y:hy-8 };                     // el ratón lo busca aquí, no a los pies
+  if(hoverKey === a.key || selectedAgent === a.key){
+    tctx.save(); tctx.strokeStyle = selectedAgent === a.key ? '#d23b30' : '#f0c43c';
+    tctx.lineWidth = 2.5; tctx.beginPath(); tctx.ellipse(hx, hy, 14, 10, 0, 0, Math.PI*2); tctx.stroke(); tctx.restore();
+  }
+  const alto = 18;
+  tctx.drawImage(img, SPR, topeCabeza(img), SPR, alto, hx-SPR/2, hy-11, SPR, alto);
+  const c = props.cama, k = ALMOHADA.corte;
+  tctx.drawImage(c, 0, k, c.width, c.height-k, cama.x, cama.y+k, c.width, c.height-k);
+  if(lastTs - ac.actividad.desde < 3500) drawBubble(hx, hy-12, ac.actividad.icono+' '+ac.actividad.texto);
+  else dibujaZzz(hx+8, hy-12);
+  cartel(a, cama.x+32, cama.y+56);
+}
+// Tres zetas que suben y se desvanecen, cada una con su desfase.
+function dibujaZzz(x, y){
+  tctx.save(); tctx.fillStyle = '#2b3a55'; tctx.textAlign = 'left';
+  for(let i=0; i<3; i++){
+    const f = (lastTs/900 + i/3) % 1;
+    tctx.globalAlpha = 1 - f;
+    tctx.font = `bold ${7+i*2}px system-ui`;
+    tctx.fillText('z', x + f*8 + i*4, y - f*12 - i*3);
+  }
+  tctx.restore();
+}
+
+// Nombre bajo el personaje, centrado en cx.
+function cartel(a, cx, y){
+  tctx.font='9px system-ui'; tctx.textAlign='center';
+  const nombre = a.name || (CHARS[a.key]?CHARS[a.key].n:a.key);
+  // Ancho a medida: con caja fija de 44 px los nombres largos se salían.
+  const ancho = Math.ceil(tctx.measureText(nombre).width)+10;
+  let x = cx-ancho/2, cy = y;
+  // Si el cartel choca con otro ya dibujado en este fotograma, se baja hasta
+  // encontrar hueco. Los actores vienen ordenados por profundidad, así que el
+  // que está delante conserva su sitio y el de detrás cede.
+  for(let intento=0; intento<6; intento++){
+    if(!carteles.some(r => x<r.x+r.w && x+ancho>r.x && cy<r.y+r.h && cy+12>r.y)) break;
+    cy += 13;
+  }
+  carteles.push({x,y:cy,w:ancho,h:12});
+  tctx.fillStyle = a.state==='idle' ? 'rgba(0,0,0,.5)' : '#1f6f2f';
+  tctx.fillRect(x,cy,ancho,12);
+  tctx.fillStyle='#fff'; tctx.fillText(nombre, x+ancho/2, cy+9);
+  tctx.textAlign='left';
+}
+
 function drawActor(a,ac){
+  const img=spriteFor(a);
+  if(!ac.moving && ac.actividad?.cama && img && props.cama) return dibujaDormido(a, ac, img, ac.actividad.cama);
+  ac.vista = null;
   // aro dorado bajo el personaje apuntado o seleccionado
   if (hoverKey === a.key || selectedAgent === a.key) {
     tctx.save();
@@ -1440,33 +1534,20 @@ function drawActor(a,ac){
     tctx.save(); tctx.globalAlpha=.22; tctx.fillStyle='#000';
     tctx.beginPath(); tctx.ellipse(ac.x+16, ac.y+30, 9.5, 3.5, 0, 0, Math.PI*2); tctx.fill(); tctx.restore();
   }
-  const img=spriteFor(a);
   const sentado = !!ac.sentado;
   const frame = sentado ? 1 : (ac.moving ? (Math.floor(ac.t/150)%3) : 1);
   // sentado: se recorta la mitad inferior, así las piernas quedan tras la silla
   const alto = sentado ? 34 : SPR;     // sentado: se ocultan las piernas tras el escritorio
   if(img) tctx.drawImage(img, frame*SPR, (DIRROW[ac.dir]||0)*SPR, SPR, alto,
                         Math.round(ac.x)+SPR_DX, Math.round(ac.y)+SPR_DY, SPR_DRAW, alto*SPR_K);
+  // Globo: lo que dice mientras trabaja o, al llegar a un rincón, lo que va a
+  // hacer. Pasados unos segundos el globo se va y queda solo el icono.
+  const act = ac.actividad, recien = act && lastTs - act.desde < 3500;
   if(a.state!=='idle' && a.lastEvent && a.lastEvent.content) drawBubble(ac.x+16,ac.y,a.lastEvent.content);
-  const icon = a.state==='approval'?'✋' : a.state==='working'?'💻' : '';
+  else if(recien) drawBubble(ac.x+16, ac.y, act.icono+' '+act.texto);
+  const icon = a.state==='approval'?'✋' : a.state==='working'?'💻' : (act && !recien) ? act.icono : '';
   if(icon){ tctx.font='15px system-ui'; tctx.textAlign='left'; tctx.fillStyle='#2b3a55'; tctx.fillText(icon,ac.x+26,ac.y-4); }
-  tctx.font='9px system-ui'; tctx.textAlign='center';
-  const nombre = a.name || (CHARS[a.key]?CHARS[a.key].n:a.key);
-  // Ancho a medida: con caja fija de 44 px los nombres largos se salían.
-  const ancho = Math.ceil(tctx.measureText(nombre).width)+10;
-  let cx = ac.x+16-ancho/2, cy = ac.y+32;
-  // Si el cartel choca con otro ya dibujado en este fotograma, se baja hasta
-  // encontrar hueco. Los actores vienen ordenados por profundidad, así que el
-  // que está delante conserva su sitio y el de detrás cede.
-  for(let intento=0; intento<6; intento++){
-    if(!carteles.some(r => cx<r.x+r.w && cx+ancho>r.x && cy<r.y+r.h && cy+12>r.y)) break;
-    cy += 13;
-  }
-  carteles.push({x:cx,y:cy,w:ancho,h:12});
-  tctx.fillStyle = a.state==='idle' ? 'rgba(0,0,0,.5)' : '#1f6f2f';
-  tctx.fillRect(cx,cy,ancho,12);
-  tctx.fillStyle='#fff'; tctx.fillText(nombre, cx+ancho/2, cy+9);
-  tctx.textAlign='left';
+  cartel(a, ac.x+16, ac.y+32);
 }
 // Reflejos que se mueven sobre el estanque: vida sin coste de CPU
 function drawWaterShimmer(ts){
