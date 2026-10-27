@@ -206,6 +206,15 @@
   .pkarrow { position:absolute; right:14px; bottom:6px; color:var(--red); font-size:15px; animation:bob .7s infinite; }
   @keyframes bob { 0%,100%{transform:translateY(0)} 50%{transform:translateY(3px)} }
   .pkhint { font-size:10px; color:var(--gray); text-align:right; margin-top:3px; }
+  /* Opciones del diálogo, como el menú de los juegos: ▶ marca la elegida */
+  .pkopts { display:flex; flex-wrap:wrap; gap:6px 18px; margin-top:10px; }
+  .pkopt { background:none; border:none; box-shadow:none; border-radius:0;   /* sin el estilo de botón general */
+    padding:2px 4px 2px 18px; position:relative; cursor:pointer;
+    font-family:'Pkmn',"Courier New",monospace; font-size:15px; color:#2b3a55; }
+  .pkopt.sel::before { content:'▶'; position:absolute; left:2px; color:var(--red); }
+  .pkopt:hover { text-decoration:underline; }
+  .pkpide { display:flex; gap:8px; margin-top:10px; }
+  .pkpide input { flex:1; font-size:14px; padding:6px 8px; border:2px solid #2b3a55; border-radius:6px; }
   .result-box { background:var(--cream); border:4px solid #2b3a55; border-radius:10px;
     box-shadow:inset 0 0 0 3px var(--cream), inset 0 0 0 6px #7a90b8;
     padding:14px 16px; white-space:pre-wrap; font-size:14px; line-height:1.55; color:#2b3a55; }
@@ -301,6 +310,7 @@
         <div class="pkbox" id="dialogue" hidden>
           <div class="pkname" id="dlgName">Prof. Oak</div>
           <div class="pktext" id="dlgText"></div>
+          <div class="pkopts" id="dlgOpts" hidden></div>
           <div class="pkarrow" id="dlgArrow">▼</div>
         </div>
         <div class="pkhint" id="dlgHint" hidden>clic en el cuadro para continuar</div>
@@ -388,7 +398,10 @@ function playApprovalAlert(){
 let dlgPages=[], dlgPage=0, dlgTimer=null;
 function stripMd(s){
   return String(s||'').replace(/```[\s\S]*?```/g,' ').replace(/\[([^\]]+)\]\([^)]*\)/g,'$1')
-    .replace(/^\s*\|.*\|\s*$/gm,' ').replace(/[*_#>`|]/g,'').replace(/\s+/g,' ').trim();
+    .replace(/^\s*\|.*\|\s*$/gm,' ').replace(/[*#>`|]/g,'')
+    // El _ solo se quita en el borde de una palabra (_cursiva_): dentro es
+    // parte del nombre, y se comía send_message o ventas_2024.csv.
+    .replace(/\b_+|_+\b/g,'').replace(/\s+/g,' ').trim();
 }
 function splitPages(text,size){
   const words = String(text||'').replace(/\s+/g,' ').split(' ');
@@ -397,22 +410,63 @@ function splitPages(text,size){
   if(cur.trim()) pages.push(cur.trim());
   return pages.length ? pages : ['…'];
 }
+// Opciones de la última página ({texto, fn}) y cuál está marcada.
+let dlgOpciones=[], dlgSel=0;
 function typePage(){
   const el=$('dlgText'), full=dlgPages[dlgPage]||'';
-  clearInterval(dlgTimer); el.textContent=''; $('dlgArrow').style.display='none';
+  clearInterval(dlgTimer); el.textContent=''; $('dlgArrow').style.display='none'; $('dlgOpts').hidden=true;
   let i=0;
   dlgTimer=setInterval(()=>{ el.textContent=full.slice(0,++i);
-    if(i>=full.length){ clearInterval(dlgTimer); $('dlgArrow').style.display='block'; } },18);
+    if(i>=full.length){ clearInterval(dlgTimer); paginaTerminada(); } },18);
 }
-function showDialogue(name,text){
-  dlgPages=splitPages(stripMd(text)); dlgPage=0;
-  $('dlgName').textContent=name; $('dialogue').hidden=false; $('dlgHint').hidden=false; typePage();
+// Al acabar de escribirse una página: la flecha para seguir o, si es la
+// última y hay que decidir algo, las opciones.
+function paginaTerminada(){
+  const ultima = dlgPage === dlgPages.length-1;
+  if(ultima && dlgOpciones.length){ $('dlgArrow').style.display='none'; pintaOpciones(); }
+  else $('dlgArrow').style.display='block';
+}
+function pintaOpciones(){
+  const o = $('dlgOpts'); o.hidden = false;
+  o.replaceChildren(...dlgOpciones.map((op,i) =>
+    h('button',{class:'pkopt'+(i===dlgSel?' sel':''), onclick:(e)=>{ e.stopPropagation(); elegirOpcion(i); }}, op.texto)));
+}
+function elegirOpcion(i){ const op = dlgOpciones[i]; dlgOpciones = []; $('dlgOpts').hidden = true; op?.fn(); }
+function showDialogue(name,text,opciones){
+  dlgPages=splitPages(stripMd(text)); dlgPage=0; dlgOpciones=opciones||[]; dlgSel=0;
+  // Se vacía lo del diálogo anterior: un campo de texto que se quedara aquí,
+  // aunque oculto, impediría cerrar el nuevo (advanceDialogue lo busca).
+  $('dlgOpts').replaceChildren();
+  $('dlgName').textContent=name; $('dialogue').hidden=false;
+  $('dlgHint').textContent = 'clic en el cuadro o E para continuar';
+  $('dlgHint').hidden=false; typePage();
 }
 function advanceDialogue(){
   const el=$('dlgText'), full=dlgPages[dlgPage]||'';
-  if(el.textContent.length<full.length){ clearInterval(dlgTimer); el.textContent=full; $('dlgArrow').style.display='block'; return; }
+  if(el.textContent.length<full.length){ clearInterval(dlgTimer); el.textContent=full; paginaTerminada(); return; }
   if(dlgPage<dlgPages.length-1){ dlgPage++; typePage(); }
-  else { $('dialogue').hidden=true; $('dlgHint').hidden=true; }
+  else if(!dlgOpciones.length && !$('dlgOpts').querySelector('input')) cerrarDialogo();   // con opciones hay que elegir
+}
+function cerrarDialogo(){
+  clearInterval(dlgTimer); dlgOpciones = [];
+  $('dialogue').hidden=true; $('dlgHint').hidden=true; $('dlgOpts').hidden=true; $('dlgOpts').replaceChildren();
+  soltarCharla();
+}
+// Pide un texto dentro del propio cuadro (para encargar algo). Enter envía y
+// Escape cancela; mientras se escribe, las teclas no mueven al jugador.
+function pedirTexto(placeholder, alEnviar){
+  const input = h('input',{type:'text', placeholder, maxlength:'300'});
+  const enviar = () => { const v = input.value.trim(); if(v) alEnviar(v); };
+  input.addEventListener('keydown', e => {
+    if(e.key==='Enter'){ e.preventDefault(); enviar(); }
+    if(e.key==='Escape'){ e.preventDefault(); cerrarDialogo(); }
+    e.stopPropagation();
+  });
+  const o = $('dlgOpts'); o.hidden = false;
+  o.replaceChildren(h('div',{class:'pkpide', onclick:e=>e.stopPropagation()}, input,
+    h('button',{class:'small', onclick:enviar},'Enviar')));
+  $('dlgArrow').style.display='none';
+  input.focus();
 }
 
 // ─────────── Avisos: nuevas aprobaciones y misiones completadas ───────────
@@ -424,7 +478,7 @@ function checkApprovals(){
       if(!prevApprovals.has(a._id)){
         const n = CHARS[a.actor]?CHARS[a.actor].n:a.actor;
         playApprovalAlert();
-        showDialogue(n, `¡${n} necesita tu permiso! Quiere usar ${a.tool}. ${a.reason}. Revísalo en "Necesitan tu permiso".`);
+        showDialogue(n, `¡${n} necesita tu permiso! Quiere usar ${a.tool}. ${a.reason}. Revísalo en "Necesitan tu permiso" o acércate y pulsa E para hablarle.`);
         break;
       }
     }
@@ -597,7 +651,7 @@ function detailEl(mi){
     (mi.root.status==='done'&&mi.root.result) ? h('div',{}, h('h4',{},'✅ Resultado'), h('div',{class:'result-box'},mi.root.result)) : null,
     h('h4',{},'👥 Equipo en esta misión'),
     h('div',{class:'team'},
-      h('div',{class:'worker lead'}, h('b',{},who(mi.root.assignee)), h('span',{class:'muted'},' · líder'), badge(mi.root.status)),
+      h('div',{class:'worker lead'}, h('b',{},who(mi.root.assignee)), h('span',{class:'muted'}, (agents.find(x=>x.key===mi.root.assignee)?.isLeader ?? true) ? ' · líder' : ' · encargo directo'), badge(mi.root.status)),
       ...subs.map(t=>h('div',{class:'worker'}, who(t.assignee), badge(t.status), h('span',{class:'ttl'},t.title))),
       subs.length?null:h('div',{class:'muted'},'Aún sin delegaciones…')),
     h('details',{class:'log'}, h('summary',{},'⚡ Registro de actividad ('+((mi.events||[]).length)+')'),
@@ -963,7 +1017,7 @@ function pintaLeyenda(){
                          .map(a => (a.name || (CHARS[a.key]?CHARS[a.key].n:a.key)) +
                                    (actors[a.key].actividad ? ' '+actors[a.key].actividad.icono : ''));
     const quien = dentro.length ? '👥 '+dentro.join(', ') : 'no hay nadie';
-    el.textContent = `🏠 ${NOMBRE_ESCENA[escena]||escena} · ${quien} · 🚪 pisa el felpudo para salir · ⬅️➡️⬆️⬇️ o WASD`;
+    el.textContent = `🏠 ${NOMBRE_ESCENA[escena]||escena} · ${quien} · 🚪 pisa el felpudo para salir · ⬅️➡️⬆️⬇️ o WASD · E para hablar`;
     return;
   }
   const w = agents.filter(a=>a.state!=='idle').length;
@@ -972,11 +1026,12 @@ function pintaLeyenda(){
   const resumen = `🏢 ${w} trabajando · 🌳 ${agents.length-w-v} en el parque` + (v ? ` · 🏠 ${v} de visita` : '');
   el.textContent = visiting
     ? `🌍 ${visiting.name} · ${resumen}`
-    : `${resumen} · 🚪 entra por las puertas · ⬅️➡️⬆️⬇️ o WASD`;
+    : `${resumen} · 🚪 entra por las puertas · ⬅️➡️⬆️⬇️ o WASD · E para hablar`;
 }
 
 function moverJugador(dt){
   if(!jugador) return;
+  if(charlaCon){ jugador.moving = false; return; }        // hablando, quieto
   const e = escenas[escena]; if(!e) return;
   let dx=0, dy=0;
   if(teclas.has('arriba'))    dy-=1;
@@ -1008,6 +1063,7 @@ const TECLA = { ArrowUp:'arriba', ArrowDown:'abajo', ArrowLeft:'izquierda', Arro
 addEventListener('keydown', (ev)=>{
   // No se roba el teclado mientras se escribe en un campo.
   if(/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName||'')) return;
+  if(teclaDialogo(ev)) return;
   const k = TECLA[ev.key]; if(!k) return;
   teclas.add(k); ev.preventDefault();
 });
@@ -1154,6 +1210,15 @@ function objetivo(a, ac, ts){
 // puerta y después sigue al otro lado. Del pueblo se entra a cada edificio y de
 // cada edificio se sale al pueblo, así que basta con mirar una puerta.
 function moverAgente(a, ac, ts, dt){
+  // Hablando contigo se para y te mira. Sentado o dormido se queda como está.
+  if(charlaCon === a.key && jugador){
+    ac.moving = false;
+    if(!ac.sentado && !ac.actividad?.cama){
+      const dx = jugador.x-ac.x, dy = jugador.y-ac.y;
+      ac.dir = Math.abs(dx)>Math.abs(dy) ? (dx>0?'right':'left') : (dy>0?'down':'up');
+    }
+    return;
+  }
   const obj = objetivo(a, ac, ts);
   let destino = obj, cruza = null;
   if(ac.esc !== obj.esc){
@@ -1211,6 +1276,111 @@ function moverAgente(a, ac, ts, dt){
   // Ya en su mesa: se sienta de cara a nosotros y a su escritorio.
   ac.sentado = !!obj.mesa && !cruza && !ac.ruta.length;
   if(ac.sentado){ ac.dir = 'down'; ac.asiento = obj.entrada; }
+}
+
+// ── Hablar con los agentes ──
+// Como en los juegos: te acercas, pulsas E y el agente se para, te mira y te
+// cuenta qué hace. Desde ahí se le puede encargar algo o, si está esperando
+// tu permiso, aprobárselo sin ir al panel.
+let charlaCon = null;                 // clave del agente con el que hablas
+const ALCANCE = 44;                   // px entre pies: una casilla y algo
+// Si hay varios cerca, se habla con el que tienes DELANTE, como en los juegos:
+// con solo la distancia, dos agentes juntos te hacían hablar con el que no
+// mirabas. Entre los de delante (o, si no hay, entre todos), el más cercano.
+const MIRADA = { up:[0,-1], down:[0,1], left:[-1,0], right:[1,0] };
+function agenteAlAlcance(){
+  if(!jugador) return null;
+  const [mx,my] = MIRADA[jugador.dir] || [0,1];
+  let mejor = null, mejorNota = Infinity;
+  for(const a of agents){
+    const ac = actors[a.key]; if(!ac || ac.esc!==escena) continue;
+    const dx = ac.x-jugador.x, dy = ac.y-jugador.y, d = Math.hypot(dx,dy);
+    if(d >= ALCANCE) continue;
+    const delante = d < 1 || (dx*mx + dy*my) / d > 0.5;     // dentro de un cono de ±60°
+    const nota = (delante ? 0 : ALCANCE) + d;
+    if(nota < mejorNota){ mejorNota = nota; mejor = a; }
+  }
+  return mejor;
+}
+function soltarCharla(){
+  const ac = actors[charlaCon];
+  // Si estaba haciendo algo, vuelve a mirar a su mueble.
+  if(ac?.actividad && ac.paseo?.dir) ac.dir = ac.paseo.dir;
+  charlaCon = null;
+}
+// El input llega como JSON: se resume para que quepa en el cuadro.
+function resumenEntrada(input){
+  let o; try { o = JSON.parse(input); } catch { return String(input||'').slice(0,140); }
+  return Object.entries(o||{}).map(([k,v]) => `${k}: ${typeof v==='string' ? v : JSON.stringify(v)}`).join(' · ').slice(0,180);
+}
+async function hablar(a){
+  const ac = actors[a.key];
+  const nombre = a.name || (CHARS[a.key]?CHARS[a.key].n:a.key);
+  charlaCon = a.key;
+  const responde = texto => showDialogue(nombre, texto);
+  const act = ac?.actividad;
+
+  if(act?.cama) return showDialogue(nombre, `Zzz… Zzz… (${nombre} está echando una siesta. Mejor no despertarle.)`);
+
+  if(a.state==='approval' && !visiting){
+    const ap = (await getJSON('/api/approvals').catch(()=>[])).find(x => x.actor===a.key);
+    if(ap) return showDialogue(nombre,
+      `¡Necesito tu permiso! Quiero usar «${ap.tool}». ${ap.reason||''} Esto es lo que haría: ${resumenEntrada(ap.input)}`, [
+        { texto:'Aprobar',  fn: async()=>{ await resolveApproval(ap._id,'approved'); responde('¡Gracias! Sigo con ello.'); } },
+        { texto:'Rechazar', fn: async()=>{ await resolveApproval(ap._id,'rejected'); responde('Entendido, no lo haré.'); } },
+        { texto:'Ahora no', fn: cerrarDialogo },
+      ]);
+  }
+  if(a.state!=='idle')
+    return showDialogue(nombre, `Estoy con «${a.task||'una tarea'}».` +
+                                (a.lastEvent?.content ? ` Ahora mismo: ${a.lastEvent.content}` : ''));
+  if(visiting) return showDialogue(nombre, `¡Hola! Soy de la aldea ${visiting.name}. ${a.role||''}`);
+
+  const saludo = a.isLeader
+    ? '¡Hola! Cuéntame qué necesitas y lo repartiré entre el equipo.'
+    : `¡Hola! ${act ? `Estaba ${act.texto.toLowerCase()}. ` : ''}${a.role ? `Lo mío es: ${a.role}. ` : ''}¿Tienes algo para mí?`;
+  showDialogue(nombre, saludo, [
+    { texto: a.isLeader ? 'Encargar una misión' : 'Encargarle algo', fn: () => pedirTexto('¿Qué necesitas?', async titulo => {
+        // Al líder, como una misión normal; a un trabajador, solo para él.
+        await postJSON('/api/tasks', { title: titulo, ...(a.isLeader ? {} : { assignee: a.key }) });
+        responde(a.isLeader ? '¡Perfecto! Lo pongo en marcha con el equipo.' : '¡Entendido! Me pongo con ello.');
+        refresh();
+      }) },
+    { texto:'Adiós', fn: cerrarDialogo },
+  ]);
+}
+// Teclas del diálogo. Devuelve true si la tecla era suya.
+function teclaDialogo(ev){
+  const k = ev.key, accion = k==='e' || k==='E' || k===' ' || k==='Enter';
+  if(!$('dialogue').hidden){
+    if(k==='Escape'){ ev.preventDefault(); cerrarDialogo(); return true; }
+    if(dlgOpciones.length && !$('dlgOpts').hidden){
+      const mueve = {ArrowLeft:-1, ArrowUp:-1, a:-1, w:-1, ArrowRight:1, ArrowDown:1, d:1, s:1}[k];
+      if(mueve){ ev.preventDefault(); dlgSel = (dlgSel + mueve + dlgOpciones.length) % dlgOpciones.length; pintaOpciones(); return true; }
+      if(accion){ ev.preventDefault(); elegirOpcion(dlgSel); return true; }
+    }
+    if(accion){ ev.preventDefault(); advanceDialogue(); return true; }
+    if(charlaCon) { ev.preventDefault(); return true; }    // hablando no se anda
+    return false;
+  }
+  if(accion && (k==='e' || k==='E' || k===' ')){
+    const a = agenteAlAlcance();
+    if(a){ ev.preventDefault(); teclas.clear(); hablar(a); return true; }
+  }
+  return false;
+}
+// Aviso sobre el agente con el que puedes hablar: un globito con la E.
+function dibujaAvisoCharla(){
+  if(charlaCon || !$('dialogue').hidden) return;
+  const a = agenteAlAlcance(); if(!a) return;
+  const ac = actors[a.key], v = ac.vista || ac;
+  const x = v.x + 2, y = v.y - 30;
+  tctx.save();
+  tctx.fillStyle='#fff'; tctx.strokeStyle='#2b3a55'; tctx.lineWidth=1.5;
+  tctx.beginPath(); tctx.roundRect(x, y, 14, 12, 3); tctx.fill(); tctx.stroke();
+  tctx.fillStyle='#d23b30'; tctx.font='bold 9px system-ui'; tctx.textAlign='center';
+  tctx.fillText('E', x+7, y+9);
+  tctx.restore();
 }
 
 async function initTown(){
@@ -1581,6 +1751,7 @@ function tick(ts){
   carteles.length = 0;
   for(const {a,ac} of escenaActores) drawActor(a,ac);
   if(jugador) drawJugador();
+  dibujaAvisoCharla();
   requestAnimationFrame(tick);
 }
 let ultimaDelegacion = Date.now();

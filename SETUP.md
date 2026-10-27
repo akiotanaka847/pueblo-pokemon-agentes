@@ -86,6 +86,14 @@ Los roles se editan en [`agents/roster.ts`](agents/roster.ts).
   (como mucho tres por edificio). Si les llega trabajo, salen y van a su mesa.
   Dentro hacen cosas: se curan en el mostrador, leen, toman café o se echan
   una siesta metidos en la cama. Al empezar lo cuentan en un globo.
+- **Hablar con los agentes** — acércate con tu avatar (sale una **E** sobre el agente
+  que tienes delante) y pulsa **E** o **Espacio**. Te cuenta qué está haciendo y:
+  - si está libre, puedes **encargarle algo**: lo hace él directamente, sin pasar
+    por el Prof. Oak. Al Prof. Oak le encargas misiones para todo el equipo.
+  - si está esperando tu permiso, te dice qué quiere hacer y puedes **aprobarlo o
+    rechazarlo** ahí mismo.
+
+  Las flechas eligen opción, E o Enter confirma y Escape cierra.
 - **Cuadros de diálogo Pokémon** — los resultados aparecen escribiéndose letra a letra.
 - **Sonidos** — fanfarria al completar una tarea, aviso cuando piden permiso (botón 🔊).
 

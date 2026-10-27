@@ -179,9 +179,10 @@ async function runAgent(
     const res = await conAtributos({
       sessionId: String(tarea?.rootTaskId ?? taskId),
       userId: process.env.VILLAGE_OWNER || undefined,
-      // El nombre de traza solo lo pone el líder: es la raíz y lo comparte todo
-      // el árbol; si lo pusiera el trabajador renombraría la misión entera.
-      ...(isLeader && tarea?.title ? { traceName: tarea.title.slice(0, 200) } : {}),
+      // El nombre de traza lo pone quien hace la tarea RAÍZ: lo comparte todo el
+      // árbol, y si lo pusiera un trabajador delegado renombraría la misión
+      // entera. En un encargo directo la raíz es del propio trabajador.
+      ...(!tarea?.parentTaskId && tarea?.title ? { traceName: tarea.title.slice(0, 200) } : {}),
       tags: [actor, isLeader ? 'lider' : 'trabajador', brain.label],
       metadata: { agente: actor, tarea: String(taskId), cerebro: brain.label },
     }, () => generateText({
@@ -233,6 +234,23 @@ async function runLeader(task: any) {
   }
 }
 
+// ── Encargo directo: el usuario se lo pide a un trabajador concreto ──
+// Sin esto, una tarea con assignee 'misty' la hacía el líder con su prompt de
+// delegar, mientras el pueblo enseñaba a Misty trabajando.
+async function runWorkerTask(task: any) {
+  const taskId = task._id as TaskId;
+  const worker = task.assignee as CharacterKey;
+  await cx.updateStatus(taskId, 'in_progress');
+  try {
+    const result = await runAgent(worker, taskId, `${task.title}\n\n${task.description || ''}`.trim(), false);
+    await cx.setResult(taskId, result);
+    console.log(`✔ Encargo completado por ${worker}: ${task.title}`);
+  } catch (e: any) {
+    await cx.failTask(taskId, e.message);
+    console.error(`✖ Encargo fallido (${worker}): ${task.title} — ${e.message}`);
+  }
+}
+
 // ── Bucle principal: reclama tareas pendientes y las procesa ──
 export async function mainLoop() {
   const g = getModel();
@@ -250,7 +268,9 @@ export async function mainLoop() {
     }
     if (task) {
       console.log(`▶ Nueva tarea: "${task.title}"`);
-      await runLeader(task);
+      // Si va para un trabajador que existe, la hace él; si no, el líder.
+      if (getWorkerKeys().includes(task.assignee)) await runWorkerTask(task);
+      else await runLeader(task);
     } else {
       await sleep(2500);
     }
